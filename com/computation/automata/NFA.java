@@ -31,7 +31,7 @@ public class NFA {
 
 	StringBuilder error = new StringBuilder();
 	if (!this.states.contains(startState)) {
-	    error.append("Unknown start state '" + startState + "'");
+	    error.append("Unknown start state '" + startState + "'" + "\n");
 	} else {
 	    this.startState = startState;
 	}
@@ -45,7 +45,7 @@ public class NFA {
                     Set.<Object>of(transitionArray) +
 		    " must of the form " +
 		    "{{\"state-a\", \"input-symbol\", {\"state-0\", \"state-1\", \"state-2\", ...}}, ...}\"" +
-			     "\n\n");
+			     "\n");
 	    }
 
 	    String inState = (String)transitionArray[0];
@@ -56,7 +56,7 @@ public class NFA {
 	    if (!this.states.contains(inState)) {
 		error.append(
                     "State '" + inState + "' must be included " +
-		    "in the (states) array" + "\n\n");
+		    "in the (states) array" + "\n");
 	    }
 
 	    // detect if transition contains a new symbol not already in the (alphabet) array
@@ -64,7 +64,7 @@ public class NFA {
 		error.append(
                     "Symbol '" + symbol + "' must be included " +
 		    "in the (alphabet) array"
-                 + "\n\n");
+                 + "\n");
 	    }
 
 	    // detect if transition contains a new state not already in the (states) array
@@ -74,10 +74,10 @@ public class NFA {
 			error.append(
 				     "State '" + inState + "' must be included " +
 				     "in the (states) array"
-				     + "\n\n");
+				     + "\n");
 		    }
 		} else {
-		    error.append("Element '" + outState + "' must be a string.\n\n");
+		    error.append("Element '" + outState + "' must be a string.\n");
 		}
 	    }
 	}
@@ -195,6 +195,10 @@ public class NFA {
 	HashSet<String> automataStates = new HashSet<>(Set.<String>of(startState));
 	for (char c : input.toCharArray()) {
 	    String next = String.valueOf(c);
+	    if (!this.alphabet.contains(next)) {
+		System.err.println("Un-recoginized symbol '" + next + "'");
+		System.exit(1);
+	    }
 	    if (logging) {
 		System.out.println(automataStates + " reading '" + next + "'");
 	    }
