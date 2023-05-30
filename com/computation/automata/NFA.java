@@ -16,7 +16,7 @@ public class NFA {
     HashMap<String, HashSet<String>> emptyStringTransitions;
     String startState;
     HashSet<String> acceptStates;
-    boolean isDeterminstic;
+    boolean isDeterministic;
 
     public NFA(
         String[] states,
@@ -139,23 +139,23 @@ public class NFA {
 	// or some state has multiple transitions with the same label going to different states
 	// or some state does not have transitions for all elements of the alphabet
 	// then this automaton is nondeterministic
-	this.isDeterminstic = !this.alphabet.contains("");
+	this.isDeterministic = !this.alphabet.contains("");
 	for (String state : this.states) {
 	    HashMap<String, HashSet<String>> stateTransitions = this.transitionFunction.get(state);
 	    if (stateTransitions.size() < this.alphabet.size()) {
 		// this state does not have a transition for each alphabet element
-		this.isDeterminstic = true;
+		this.isDeterministic = true;
 		break;
 	    } else {
 		for (String element : alphabet) {
 		    int transitionsWithLabelElement = stateTransitions.get(element).size();
 		    if (transitionsWithLabelElement == 0) {
 			// this state has no transition labeled with (element)
-			this.isDeterminstic = true;
+			this.isDeterministic = true;
 			break;
 		    } else if (transitionsWithLabelElement > 1) {
 			// this state has multiple transitions labeled with (element)
-			this.isDeterminstic = true;
+			this.isDeterministic = true;
 			break;
 		    }
 		}
@@ -177,11 +177,10 @@ public class NFA {
     }
 
     public HashSet<String> moveByEmptyString(Collection<String> inputSpace) {
-	if (isDeterminstic || emptyStringTransitions.size() == 0) {
-	    return new HashSet<String>();
-	}
-
 	HashSet<String> outputSpace = new HashSet<>(inputSpace);
+	if (isDeterministic || emptyStringTransitions.size() == 0) {
+	    return outputSpace;
+	}
 	for (String state : inputSpace) {
 	    // not all states have empty string transitions, thus get may fail
 	    // use the safer getOrDefault
