@@ -1,6 +1,7 @@
 package com.computation.automata;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.HashMap;
 
@@ -9,6 +10,7 @@ public class NFA {
     HashSet<String> states;
     HashSet<String> alphabet;
     HashMap<String, HashMap<String, HashSet<String>>> transitionFunction;
+    HashMap<String, HashSet<String>> emptyStringTransitions;
     String startState;
     HashSet<String> acceptStates;
     boolean isDeterminstic;
@@ -93,5 +95,23 @@ public class NFA {
 	    String outState = transitionArray[2];
 	    this.transitionFunction.get(inState).get(symbol).add(outState);
 	}
-    }
-}
+
+	// Now we have the complete transition function,
+	// we now compute all the empty string transitions
+	// for each state, since they will be used later
+	this.emptyStringTransitions = new HashMap<>();
+	for (String state : this.states) {
+	    HashSet<String> allReachableStates = this.transitionFunction.get(state).get("");
+	    while (true) {
+		int before = allReachableStates.size();
+		for (String reachedState : new HashSet<String>(allReachableStates)) {
+		    allReachableStates.addAll(this.transitionFunction.get(reachedState).get(""));
+		}
+		if (before == allReachableStates.size()) {
+		    break;
+		}
+	    }
+	    this.emptyStringTransitions.put(state, allReachableStates);
+	}
+    } // constructor NFA
+} // class NFA
