@@ -2,7 +2,6 @@ package com.computation.automata;
 
 import java.util.Collection;
 import java.util.Set;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.HashMap;
 
@@ -25,7 +24,8 @@ public class NFA {
 	// {{"state-a", "input-symbol", {"state-0", "state-1", "state-2", ...}}, ...}
 	Object[][] transitions,
 	String startState,
-	String[] acceptStates
+	String[] acceptStates,
+	boolean isDeterministic
     ) {
 	this.states = new HashSet<>(Set.<String>of(states));
 
@@ -39,6 +39,8 @@ public class NFA {
 	this.alphabet = new HashSet<>(Set.<String>of(alphabet));
 	this.transitionFunction = new HashMap<>();
 
+	HashSet<String> statesWithEmptyStringTransitions = new HashSet<>();
+
 	for(Object[] transitionArray : transitions) {
 	    if (transitionArray.length != 3) {
 		error.append("Transition array " +
@@ -51,6 +53,10 @@ public class NFA {
 	    String inState = (String)transitionArray[0];
 	    String symbol = (String)transitionArray[1];
 	    Object[] outStates = (Object[])transitionArray[2];
+
+	    if (!isDeterministic && symbol.equals("")) {
+		statesWithEmptyStringTransitions.add(inState);
+	    }
 
 	    // detect if transition contains a new state not already in the (states) array
 	    if (!this.states.contains(inState)) {
@@ -72,7 +78,7 @@ public class NFA {
 		if (outState instanceof String) {
 		    if (!this.states.contains(outState)) {
 			error.append(
-				     "State '" + inState + "' must be included " +
+				     "State '" + outState + "' must be included " +
 				     "in the (states) array"
 				     + "\n");
 		    }
@@ -118,14 +124,12 @@ public class NFA {
 	// we now compute all the empty string transitions
 	// for each state, since they will be used later
 	this.emptyStringTransitions = new HashMap<>();
-	for (String state : this.states) {
-	    // get("") may fail because not every alphabet supplied to this constructor contains the empty string
-	    // thus we use the safe getOrDefault
-	    HashSet<String> allReachableStates = this.transitionFunction.get(state).getOrDefault("", new HashSet<String>());
+	for (String state : statesWithEmptyStringTransitions) {
+	    HashSet<String> allReachableStates = this.transitionFunction.get(state).get("");
 	    while (true) {
 		int before = allReachableStates.size();
 		for (String reachedState : new HashSet<String>(allReachableStates)) {
-		    allReachableStates.addAll(this.transitionFunction.get(reachedState).getOrDefault("", new HashSet<String>()));
+		    allReachableStates.addAll(this.transitionFunction.get(reachedState).get(""));
 		}
 		if (before == allReachableStates.size()) {
 		    break;
@@ -133,35 +137,17 @@ public class NFA {
 	    }
 	    this.emptyStringTransitions.put(state, allReachableStates);
 	}
-
-	// Check for automata type
-	// if the alphabet contains the empty string
-	// or some state has multiple transitions with the same label going to different states
-	// or some state does not have transitions for all elements of the alphabet
-	// then this automaton is nondeterministic
-	this.isDeterministic = !this.alphabet.contains("");
-	for (String state : this.states) {
-	    HashMap<String, HashSet<String>> stateTransitions = this.transitionFunction.get(state);
-	    if (stateTransitions.size() < this.alphabet.size()) {
-		// this state does not have a transition for each alphabet element
-		this.isDeterministic = true;
-		break;
-	    } else {
-		for (String element : alphabet) {
-		    int transitionsWithLabelElement = stateTransitions.get(element).size();
-		    if (transitionsWithLabelElement == 0) {
-			// this state has no transition labeled with (element)
-			this.isDeterministic = true;
-			break;
-		    } else if (transitionsWithLabelElement > 1) {
-			// this state has multiple transitions labeled with (element)
-			this.isDeterministic = true;
-			break;
-		    }
-		}
-	    }
-	}
     } // constructor NFA
+
+    public NFA(
+        String[] states,
+	String[] alphabet,
+	Object[][] transitions,
+	String startState,
+	String[] acceptStates
+    ) {
+	this(states, alphabet, transitions, startState, acceptStates, false);
+    }
 
     public HashSet<String> move(Collection<String> inputSpace,
 				String inputSymbol) {
