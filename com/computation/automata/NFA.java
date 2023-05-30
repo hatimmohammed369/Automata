@@ -22,8 +22,8 @@ public class NFA {
         String[] states,
 	// if the empty string is in (alphabet), then it's nondeterministic
 	String[] alphabet,
-	// {{"state-a", "input-symbol", "state-b"}, ...}
-	String[][] transitions,
+	// {{"state-a", "input-symbol", {"state-0", "state-1", "state-2", ...}}, ...}
+	Object[][] transitions,
 	String startState,
 	String[] acceptStates
     ) {
@@ -39,18 +39,18 @@ public class NFA {
 	this.alphabet = new HashSet<>(Set.<String>of(alphabet));
 	this.transitionFunction = new HashMap<>();
 
-	for(String[] transitionArray : transitions) {
+	for(Object[] transitionArray : transitions) {
 	    if (transitionArray.length != 3) {
 		error.append("Transition array " +
-                    Set.<String>of(transitionArray) +
+                    Set.<Object>of(transitionArray) +
 		    " must of the form " +
-		    "{\"in-state\", \"input-symbol\", \"state-b\"}" +
+		    "{{\"state-a\", \"input-symbol\", {\"state-0\", \"state-1\", \"state-2\", ...}}, ...}\"" +
 			     "\n\n");
 	    }
 
-	    String inState = transitionArray[0];
-	    String symbol = transitionArray[1];
-	    String outState = transitionArray[2];
+	    String inState = (String)transitionArray[0];
+	    String symbol = (String)transitionArray[1];
+	    Object[] outStates = (Object[])transitionArray[2];
 
 	    // detect if transition contains a new state not already in the (states) array
 	    if (!this.states.contains(inState)) {
@@ -68,11 +68,17 @@ public class NFA {
 	    }
 
 	    // detect if transition contains a new state not already in the (states) array
-	    if (!this.states.contains(outState)) {
-		error.append(
-                    "State '" + inState + "' must be included " +
-		    "in the (states) array"
-                 + "\n\n");
+	    for (Object outState : outStates) {
+		if (outState instanceof String) {
+		    if (!this.states.contains(outState)) {
+			error.append(
+				     "State '" + inState + "' must be included " +
+				     "in the (states) array"
+				     + "\n\n");
+		    }
+		} else {
+		    error.append("Element '" + outState + "' must be a string.\n\n");
+		}
 	    }
 	}
 
@@ -99,11 +105,13 @@ public class NFA {
 	}
 
 	// fill in the maps for each symbol for each state
-	for (String[] transitionArray : transitions) {
-	    String inState = transitionArray[0];
-	    String symbol = transitionArray[1];
-	    String outState = transitionArray[2];
-	    this.transitionFunction.get(inState).get(symbol).add(outState);
+	for (Object[] transitionArray : transitions) {
+	    String inState = (String)transitionArray[0];
+	    String symbol = (String)transitionArray[1];
+	    HashSet<String> set = this.transitionFunction.get(inState).get(symbol);
+	    for (Object outState : (Object[])transitionArray[2]) {
+		set.add((String)outState);
+	    }
 	}
 
 	// Now we have the complete transition function,
@@ -172,7 +180,7 @@ public class NFA {
 	if (isDeterminstic || emptyStringTransitions.size() == 0) {
 	    return new HashSet<String>();
 	}
-	
+
 	HashSet<String> outputSpace = new HashSet<>(inputSpace);
 	for (String state : inputSpace) {
 	    // not all states have empty string transitions, thus get may fail
