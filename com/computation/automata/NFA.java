@@ -174,11 +174,9 @@ public class NFA {
 	    // add all reachable states from X by reading (inputSymbol)
 	    // after that expand the set you just obtained by following
 	    // all empty string transitions, if any
-	    outputSpace.addAll(
-                moveByEmptyString(
-                    transitionFunction.get(state).get(inputSymbol)
-                )
-            );
+	    HashSet<String> x = transitionFunction.get(state).get(inputSymbol);
+	    HashSet<String> y = expand(x);
+	    outputSpace.addAll(y);
 	}
 	return outputSpace;
     }
@@ -186,7 +184,7 @@ public class NFA {
     // Return all states reachable from the input set with
     // 0 or more empty string transitions
     // Thus the input set is always part of return value
-    public HashSet<String> moveByEmptyString(Collection<String> inputSpace) {
+    public HashSet<String> expand(Collection<String> inputSpace) {
 	// Start with the input set
 	HashSet<String> outputSpace = new HashSet<>(inputSpace);
 	if (emptyStringTransitions.isEmpty()) {
@@ -197,7 +195,7 @@ public class NFA {
 	}
 	for (String state : inputSpace) {
 	    // not all states have empty string transitions
-	    // thus calling get on emptystringtransitions may fail
+	    // thus calling get on emptyStringTransitions may fail
 	    // Hence, use the safer getOrDefault
 	    outputSpace.addAll(emptyStringTransitions.getOrDefault(state, new HashSet<String>()));
 	}
@@ -210,7 +208,7 @@ public class NFA {
 
 	// expand the start set with all states reachable from the start start
 	// with empty string transitions
-	HashSet<String> automatonStates = moveByEmptyString(Set.<String>of(startState));
+	HashSet<String> automatonStates = expand(Set.<String>of(startState));
 
 	for (char c : input.toCharArray()) {
 	    String next = String.valueOf(c);
