@@ -1,5 +1,7 @@
 package com.computation.automata;
 
+import java.util.Arrays;
+import java.util.Formatter;
 import java.util.function.Function;
 import java.util.Collection;
 import java.util.Set;
@@ -63,11 +65,17 @@ public class NFA {
 	    String symbol = (String)transitionArray[1];
 	    Object[] outStates = (Object[])transitionArray[2];
 
-	    if (!isDeterministic && symbol.equals("")) {
-		// if this automaton object is nondeterministic
-		// and current transition has the empty string
-		// then store input state (inState)
-		statesWithEmptyStringTransitions.add(inState);
+	    if (symbol.equals("")) {
+		if (isDeterministic) {
+		    error.append("This automaton is deterministic, but transition '" +
+				 new Formatter().format("{\"%s\", \"\", %s}", inState, Arrays.asList(outStates).toString()).toString() +
+				 "' has empty string label\n");
+		} else {
+		    // if this automaton object is nondeterministic
+		    // and current transition has the empty string
+		    // then store input state (inState)
+		    statesWithEmptyStringTransitions.add(inState);
+		}
 	    }
 
 	    // detect if input state in this transition
