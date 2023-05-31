@@ -21,7 +21,10 @@ public class NFA {
     String startState;
     HashSet<String> acceptStates;
     boolean isDeterministic;
-    NFA deterministicThisCache = null;
+    // this field stays null for deterministic automata
+    // since calling toDFA just returns this object
+    // which is already deterministic
+    NFA thisDFACache = null;
 
     NFA() {}
 
@@ -216,125 +219,6 @@ public class NFA {
 	return outputSpace;
     }
 
-    public NFA toDFA(String failState) {
-	if (this.deterministicThisCache != null) {
-	    return this.deterministicThisCache;
-	}
-
-	this.deterministicThisCache = new NFA();
-	this.deterministicThisCache.emptyStringTransitions = new HashMap<String, HashSet<String>>();
-	this.deterministicThisCache.isDeterministic = true;
-
-	final HashSet<String> localAlphabet = new HashSet<String>(this.alphabet);
-	localAlphabet.remove("");
-	this.deterministicThisCache.alphabet = new HashSet<String>(localAlphabet);
-
-	if (isDeterministic) {
-	    // This automaton is deterministic
-	    // Just return a copy of this automaton
-	    this.deterministicThisCache.states = new HashSet<String>(this.states);
-	    this.deterministicThisCache.transitionFunction = new HashMap<String, HashMap<String, HashSet<String>>>(transitionFunction);
-	    this.deterministicThisCache.startState = String.valueOf(startState);
-	    this.deterministicThisCache.acceptStates = new HashSet<String>(acceptStates);
-
-	    return this.deterministicThisCache;
-	}
-
-	final Function<Object, String> rep = (x) -> {
-	    StringBuilder s = new StringBuilder(x.toString());
-	    s.setCharAt(0, '<');
-	    s.setCharAt(s.length() - 1, '>');
-	    return s.toString();
-	};
-
-	ArrayList<TreeSet<String>> powerSet = new ArrayList<>();
-	powerSet.add(new TreeSet<>()); // the empty set, the first subset
-	HashSet<String> finalSets = new HashSet<>(); // all sets containing at least one final (accept) state
-	for (int size = 1; size <= this.states.size(); size++) {
-	    // for each number in {1, ..., this.states.size()}
-	    int currentSubsets = powerSet.size();
-	    for (int i = 0;i < currentSubsets;i++) {
-		TreeSet<String> subset = powerSet.get(i);
-		// for each subset of this.states
-		for (String element : this.states) {
-		    // for each state in this.states,
-		    // add (element) to this subset forming a new subset
-		    TreeSet<String> x = new TreeSet<>(subset);
-		    x.add(element);
-		    // since we're using an array list to store the subsets
-		    // we must ensure we don't have duplicates
-		    boolean add = true; // assume this (x) is new
-		    for (int j = 0;j < powerSet.size();j++) {
-			if (powerSet.get(j).containsAll(x) && x.containsAll(powerSet.get(j))) {
-			    // this subset already exists
-			    add = false;
-			    break;
-			}
-		    }
-		    if (add) {
-			powerSet.add(x); // new subset added
-			boolean isFinalSet = false;
-			for (String finalState : this.acceptStates) {
-			    if (x.contains(finalState)) {
-				isFinalSet = true;
-				break;
-			    }
-			}
-			if (isFinalSet) {
-			    // if it contains at least one final state of this automaton
-			    // then this (x) is a final state of the deterministic
-			    // counterpart of this nondeterministic automaton
-			    finalSets.add(rep.apply(x));
-			}
-		    }
-		}
-	    }
-	}
-	powerSet.get(0).add(failState); // "the empty set", which is no longer empty
-
-	// transition function for the deterministic version of (this)
-	HashMap<String, HashMap<String, HashSet<String>>> function = new HashMap<>();
-	{
-	    HashMap<String, HashSet<String>> failStateTransitions = new HashMap<>();
-	    for (String symbol : localAlphabet) {
-		final HashSet<String> out = new HashSet<>(Set.<String>of( "<" + failState + ">" ));
-		failStateTransitions.put(symbol, out);
-	    }
-	    function.put(rep.apply(powerSet.get(0)), failStateTransitions);
-	}
-
-	this.deterministicThisCache.states = new HashSet<String>();
-	this.deterministicThisCache.states.add("<" + failState + ">");
-
-	HashSet<String> startSet = expand(Set.<String>of(this.startState));
-	String startSetName = null;
-	for (int i = 1; i < powerSet.size(); i++) {
-	    TreeSet<String> subset = powerSet.get(i);
-	    HashMap<String, HashSet<String>> subsetMap = new HashMap<>();
-	    for (String symbol : localAlphabet) {
-		HashSet<String> x = this.move(subset, symbol);
-		if (x.isEmpty()) {
-		    x.add(failState);
-		}
-		subsetMap.put(symbol, new HashSet<String>(Set.<String>of(rep.apply(x))));
-	    }
-	    String setName = rep.apply(subset);
-	    function.put(setName, subsetMap);
-	    this.deterministicThisCache.states.add(setName);
-	    if (startSetName == null) {
-		if (subset.containsAll(startSet) && startSet.containsAll(subset)) {
-		    startSetName = setName;
-		}
-	    }
-	}
-
-	this.deterministicThisCache.transitionFunction = function;
-	this.deterministicThisCache.startState = startSetName;
-	this.deterministicThisCache.acceptStates = finalSets;
-
-	return this.deterministicThisCache;
-    }
-
     public static enum Computation {Accept, Reject};
     public Computation compute(String input, boolean logging) {
 	if (logging) System.out.println("Computing on input '" + input + "'");
@@ -383,5 +267,110 @@ public class NFA {
 
     public Computation compute(String input) {
 	return compute(input, true);
+    }
+
+    public NFA toDFA(String failState) {
+	if (isDeterministic) return this;
+	if (thisDFACache != null) return thisDFACache; // no need to redo the computation
+
+	thisDFACache = new NFA();
+
+	// no empty string transitions in deterministic automata
+	thisDFACache.emptyStringTransitions = new HashMap<String, HashSet<String>>();
+	thisDFACache.isDeterministic = true; // by definition
+
+	thisDFACache.alphabet = new HashSet<String>(this.alphabet);
+	thisDFACache.alphabet.remove(""); // remove the empty string if present
+
+	thisDFACache.states = new HashSet<String>();
+	thisDFACache.transitionFunction = new HashMap<String, HashMap<String, HashSet<String>>>();
+	thisDFACache.acceptStates = new HashSet<String>();
+
+	final Function<Object, String> nameStyle = (x) -> {
+	    StringBuilder s = new StringBuilder(x.toString());
+	    s.setCharAt(0, '<');
+	    s.setCharAt(s.length() - 1, '>');
+	    return s.toString();
+	};
+	thisDFACache.startState = nameStyle.apply(expand(Set.<String>of(this.startState)));
+
+	ArrayList<HashSet<String>> powerSet = new ArrayList<>();
+	powerSet.add(new HashSet<String>()); // the empty set
+
+	final String failStateName = "<" + failState + ">";
+	for (int size = 1; size <= this.states.size(); size++) {
+	    int current = powerSet.size();
+	    for (int i = 0; i < current; i++) {
+		HashSet<String> subset = powerSet.get(i);
+		for (String state : this.states) {
+		    HashSet<String> newSubset = new HashSet<>(subset);
+		    newSubset.add(state);
+
+		    // make sure this (newSubset) is actually "new"
+		    // search through all (powerSet),
+		    // if this (newSubset) matches something there
+		    // we will not add it to (powerSet)
+		    // otherwise we will add it to (powerSet)
+		    boolean addNewSubset = true; // assume it's new
+		    for (int j = 0; j < powerSet.size(); j++) {
+			if (newSubset.containsAll(powerSet.get(j)) && powerSet.get(j).containsAll(newSubset)) {
+			    // it's a subset of powerSet.get(j) and powerSet.get(j) is a subset of it
+			    // thus newSubset is just powerSet.get(j)
+			    // it's already there, do not allow it
+			    addNewSubset = false;
+			    break;
+			}
+		    }
+
+		    if (addNewSubset) {
+			powerSet.add(newSubset); // so that we continue this iteration
+
+			final String newSubsetName = nameStyle.apply(newSubset);
+			thisDFACache.states.add(newSubsetName);
+
+			// check to see if it contains an accept state
+			// because if then it's an accept state of the deterministic
+			// counterpart of this nondeterministic automaton object
+			for (String acceptState : this.acceptStates) {
+			    if (newSubset.contains(acceptState)) {
+				thisDFACache.acceptStates.add(newSubsetName);
+				break;
+			    }
+			}
+
+			// add all of its transitions
+			HashMap<String, HashSet<String>> newSubsetMap = new HashMap<>();
+			for (String symbol : thisDFACache.alphabet) {
+			    HashSet<String> symbolOutputs = new HashSet<>();
+			    HashSet<String> x = move(newSubset, symbol);
+			    if (x.isEmpty()) {
+				// all states in (newSubset) do not move further
+				// when given input (symbol), thus the expression
+				// move(newSubset, symbol) yields the empty set
+				// which we represent as fail state
+				symbolOutputs.add(failStateName);
+			    } else {
+				symbolOutputs.add(nameStyle.apply(x));
+			    }
+			    newSubsetMap.put(symbol, symbolOutputs);
+			}
+			thisDFACache.transitionFunction.put(newSubsetName, newSubsetMap);
+		    }
+		}
+	    }
+	}
+
+	// Add fail state and its transitions
+	thisDFACache.states.add(failStateName);
+	final HashMap<String, HashSet<String>> failStateTransitions = new HashMap<>();
+	for (String symbol : thisDFACache.alphabet) {
+	    // for each symbol fail state receives,
+	    // it just goes back to itself.
+	    // each of its transitions are {failStatename, symbol, {failStateName}}
+	    failStateTransitions.put(symbol, new HashSet<String>(Set.<String>of(failStateName)));
+	}
+	thisDFACache.transitionFunction.put(failStateName, failStateTransitions);
+
+	return thisDFACache;
     }
 } // class NFA
