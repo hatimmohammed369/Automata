@@ -1,7 +1,10 @@
 package com.computation.automata;
 
+import java.util.function.Function;
 import java.util.Collection;
 import java.util.Set;
+import java.util.ArrayList;
+import java.util.TreeSet;
 import java.util.HashSet;
 import java.util.HashMap;
 
@@ -16,6 +19,9 @@ public class NFA {
     String startState;
     HashSet<String> acceptStates;
     boolean isDeterministic;
+    NFA deterministicThisCache = null;
+
+    NFA() {}
 
     public NFA(
         String[] states,
@@ -200,6 +206,125 @@ public class NFA {
 	    outputSpace.addAll(emptyStringTransitions.getOrDefault(state, new HashSet<String>()));
 	}
 	return outputSpace;
+    }
+
+    public NFA toDFA(String failState) {
+	if (this.deterministicThisCache != null) {
+	    return this.deterministicThisCache;
+	}
+
+	this.deterministicThisCache = new NFA();
+	this.deterministicThisCache.emptyStringTransitions = new HashMap<String, HashSet<String>>();
+	this.deterministicThisCache.isDeterministic = true;
+
+	final HashSet<String> localAlphabet = new HashSet<String>(this.alphabet);
+	localAlphabet.remove("");
+	this.deterministicThisCache.alphabet = new HashSet<String>(localAlphabet);
+
+	if (isDeterministic) {
+	    // This automaton is deterministic
+	    // Just return a copy of this automaton
+	    this.deterministicThisCache.states = new HashSet<String>(this.states);
+	    this.deterministicThisCache.transitionFunction = new HashMap<String, HashMap<String, HashSet<String>>>(transitionFunction);
+	    this.deterministicThisCache.startState = String.valueOf(startState);
+	    this.deterministicThisCache.acceptStates = new HashSet<String>(acceptStates);
+
+	    return this.deterministicThisCache;
+	}
+
+	final Function<Object, String> rep = (x) -> {
+	    StringBuilder s = new StringBuilder(x.toString());
+	    s.setCharAt(0, '<');
+	    s.setCharAt(s.length() - 1, '>');
+	    return s.toString();
+	};
+
+	ArrayList<TreeSet<String>> powerSet = new ArrayList<>();
+	powerSet.add(new TreeSet<>()); // the empty set, the first subset
+	HashSet<String> finalSets = new HashSet<>(); // all sets containing at least one final (accept) state
+	for (int size = 1; size <= this.states.size(); size++) {
+	    // for each number in {1, ..., this.states.size()}
+	    int currentSubsets = powerSet.size();
+	    for (int i = 0;i < currentSubsets;i++) {
+		TreeSet<String> subset = powerSet.get(i);
+		// for each subset of this.states
+		for (String element : this.states) {
+		    // for each state in this.states,
+		    // add (element) to this subset forming a new subset
+		    TreeSet<String> x = new TreeSet<>(subset);
+		    x.add(element);
+		    // since we're using an array list to store the subsets
+		    // we must ensure we don't have duplicates
+		    boolean add = true; // assume this (x) is new
+		    for (int j = 0;j < powerSet.size();j++) {
+			if (powerSet.get(j).containsAll(x) && x.containsAll(powerSet.get(j))) {
+			    // this subset already exists
+			    add = false;
+			    break;
+			}
+		    }
+		    if (add) {
+			powerSet.add(x); // new subset added
+			boolean isFinalSet = false;
+			for (String finalState : this.acceptStates) {
+			    if (x.contains(finalState)) {
+				isFinalSet = true;
+				break;
+			    }
+			}
+			if (isFinalSet) {
+			    // if it contains at least one final state of this automaton
+			    // then this (x) is a final state of the deterministic
+			    // counterpart of this nondeterministic automaton
+			    finalSets.add(rep.apply(x));
+			}
+		    }
+		}
+	    }
+	}
+	powerSet.get(0).add(failState); // "the empty set", which is no longer empty
+
+	// transition function for the deterministic version of (this)
+	HashMap<String, HashMap<String, HashSet<String>>> function = new HashMap<>();
+	{
+	    HashMap<String, HashSet<String>> failStateTransitions = new HashMap<>();
+	    for (String symbol : localAlphabet) {
+		final HashSet<String> out = new HashSet<>(Set.<String>of( "<" + failState + ">" ));
+		failStateTransitions.put(symbol, out);
+	    }
+	    function.put(rep.apply(powerSet.get(0)), failStateTransitions);
+	}
+
+	this.deterministicThisCache.states = new HashSet<String>();
+	this.deterministicThisCache.states.add("<" + failState + ">");
+
+	HashSet<String> startSet = expand(Set.<String>of(this.startState));
+	String startSetName = null;
+	for (int i = 1; i < powerSet.size(); i++) {
+	    TreeSet<String> subset = powerSet.get(i);
+	    HashMap<String, HashSet<String>> subsetMap = new HashMap<>();
+	    for (String symbol : localAlphabet) {
+		HashSet<String> x = this.move(subset, symbol);
+		if (x.isEmpty()) {
+		    x.add(failState);
+		}
+		subsetMap.put(symbol, new HashSet<String>(Set.<String>of(rep.apply(x))));
+	    }
+	    String setName = rep.apply(subset);
+	    function.put(setName, subsetMap);
+	    this.deterministicThisCache.states.add(setName);
+	    if (startSetName == null) {
+		if (subset.containsAll(startSet) && startSet.containsAll(subset)) {
+		    startSetName = setName;
+		}
+	    }
+	}
+
+	this.deterministicThisCache.transitionFunction = function;
+	this.deterministicThisCache.startState = startSetName;
+	this.deterministicThisCache.acceptStates = finalSets;
+
+	return this.deterministicThisCache;
     }
 
     public static enum Computation {Accept, Reject};
