@@ -26,7 +26,15 @@ public class NFA {
     // which is already deterministic
     NFA thisDFACache = null;
 
-    NFA() {}
+    NFA() {
+	this.states = new HashSet<>();
+	this.alphabet = new HashSet<>();
+	this.transitionFunction = new HashMap<>();
+	this.emptyStringTransitions = new HashMap<>();
+	this.startState = null;
+	this.acceptStates = new HashSet<>();
+	this.isDeterministic = false;
+    }
 
     public NFA(
         String[] states,
@@ -127,7 +135,7 @@ public class NFA {
 	    HashMap<String, HashSet<String>> stateTransitions = new HashMap<>();
 	    for (String symbol : this.alphabet) {
 		// the map is empty here
-		stateTransitions.put(symbol, new HashSet<String>());
+		stateTransitions.put(symbol, new HashSet<>());
 	    }
 	    this.transitionFunction.put(state, stateTransitions);
 	}
@@ -153,7 +161,7 @@ public class NFA {
 	    HashSet<String> allReachableStates = this.transitionFunction.get(state).get("");
 	    while (true) {
 		int before = allReachableStates.size();
-		for (String reachedState : new HashSet<String>(allReachableStates)) {
+		for (String reachedState : new HashSet<>(allReachableStates)) {
 		    // state stored in (reachedState) may not have empty string transitions
 		    // thus calling transitionfunction.get(reachedState).get("") may fail
 		    // because (reachedState) may not transitions labeled with ""
@@ -274,18 +282,13 @@ public class NFA {
 	if (isDeterministic) return this;
 	if (thisDFACache != null) return thisDFACache; // no need to redo the computation
 
+	// constructor NFA() initializes all fileds
 	thisDFACache = new NFA();
 
-	// no empty string transitions in deterministic automata
-	thisDFACache.emptyStringTransitions = new HashMap<String, HashSet<String>>();
 	thisDFACache.isDeterministic = true; // by definition
 
-	thisDFACache.alphabet = new HashSet<String>(this.alphabet);
+	thisDFACache.alphabet.addAll(this.alphabet);
 	thisDFACache.alphabet.remove(""); // remove the empty string if present
-
-	thisDFACache.states = new HashSet<String>();
-	thisDFACache.transitionFunction = new HashMap<String, HashMap<String, HashSet<String>>>();
-	thisDFACache.acceptStates = new HashSet<String>();
 
 	final Function<Object, String> nameStyle = (x) -> {
 	    StringBuilder s = new StringBuilder(x.toString());
@@ -368,7 +371,7 @@ public class NFA {
 	    // for each symbol fail state receives,
 	    // it just goes back to itself.
 	    // each of its transitions are {failStatename, symbol, {failStateName}}
-	    failStateTransitions.put(symbol, new HashSet<String>(Set.<String>of(failStateName)));
+	    failStateTransitions.put(symbol, new HashSet<>(Set.<String>of(failStateName)));
 	}
 	thisDFACache.transitionFunction.put(failStateName, failStateTransitions);
 
