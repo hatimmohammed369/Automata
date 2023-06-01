@@ -1,10 +1,10 @@
 package com.computation.automata;
 
-import java.util.Arrays;
 import java.util.function.Function;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.TreeSet;
 import java.util.HashSet;
@@ -16,6 +16,7 @@ public class NFA {
     HashSet<String> alphabet;
     // in (transitionFunction) keys are states
     // keys in (HashMap<String, HashSet<String>>) are alphabet symbols
+    // WHENEVER USING (transitionFunction) USE getOrDefault.
     HashMap<String, HashMap<String, HashSet<String>>> transitionFunction;
     HashMap<String, HashSet<String>> emptyStringTransitions;
     String startState;
@@ -394,5 +395,158 @@ public class NFA {
 	thisDFACache.transitionFunction.put(failStateName, failStateTransitions);
 
 	return thisDFACache;
+    }
+
+    public static NFA union(NFA first, NFA second, String newStartState, String suffix) {
+	if (first.states.contains(newStartState)) {
+	    System.err.println(
+                "First automaton already has state '" +
+		newStartState + "'");
+	    System.exit(1);
+	}
+	if (second.states.contains(newStartState)) {
+	    System.err.println(
+                "Second automaton already has state '" +
+		newStartState + "'");
+	    System.exit(1);
+	}
+	if (suffix.isEmpty()) {
+	    System.err.println("Provided suffix must be non-empty string.");
+	    System.exit(1);
+	}
+
+	NFA union = new NFA();
+	union.startState = newStartState; // Set start state for the union automaton.
+	union.states.add(newStartState);
+	union.isDeterministic = false;
+
+	union.alphabet.addAll(first.alphabet);
+	union.alphabet.addAll(second.alphabet);
+	// Manually add the empty string to the alphabet
+	// just in case both (first) and (second) are deterministic.
+	union.alphabet.add("");
+
+	HashSet<String> duplicateStates = new HashSet<>(); // Store states in (second) also in (first).
+	union.states.addAll(first.states);
+	for (String state : second.states) {
+	    // If this state, which is from (second),
+	    // is already in (union.states), append string in (suffix)
+	    // so that names don't clash and the two automata
+	    // operate separately when running (union).
+	    String stateName = state;
+	    if (union.states.contains(state)) {
+		stateName += suffix;
+		duplicateStates.add(state);
+	    }
+	    union.states.add(stateName);
+	}
+
+	union.acceptStates.addAll(first.acceptStates);
+	for (String state : second.acceptStates) {
+	    // Do the same as above when adding states to (union)
+	    // accept states must also be handled similary
+	    // to avoid name clashes.
+	    String stateName = state;
+	    if (duplicateStates.contains(state)) {
+		stateName += suffix;
+	    }
+	    union.acceptStates.add(stateName);
+	}
+
+	// Construct transition function.
+	// First, put all transitions in the first automaton.
+	union.transitionFunction.putAll(first.transitionFunction);
+	// Second, handle transitions in the second automaton.
+	for (String state : second.states) {
+	    // If (state) is in both (first) and (second),
+	    // do not use its name, rather append value of (suffix)
+	    String stateName = state;
+	    if (duplicateStates.contains(state)) {
+		stateName += suffix;
+	    }
+	    HashMap<String, HashSet<String>> correctedMap = new HashMap<>();
+	    for (Map.Entry<String, HashSet<String>> e :
+		     second.transitionFunction.
+		     getOrDefault(state, new HashMap<String, HashSet<String>>()).
+		     entrySet()
+            ) {
+		// e.getKey() is a symbol from second.alphabet.
+		// e.getValue() is all states reachable from (state)
+		// when reading symbol e.getKey()
+		HashSet<String> correctedSet = new HashSet<>();
+		for (String x : e.getValue()) {
+		    // If (x) is a duplicate state, suffix it with value of (suffix)
+		    // so it refers to (x) in (second) not in (first).
+		    // This is because we're handling transitions in (second)
+		    // so if state (q) is in both (first) and (second)
+		    // we interpreter it as belonging to (second).
+		    correctedSet.add(
+                        x + (duplicateStates.contains(x) ? suffix : "")
+                    );
+		}
+		correctedMap.put(e.getKey(), correctedSet);
+	    }
+	    union.transitionFunction.put(stateName, correctedMap);
+	}
+
+	// Add transitions of the new start state.
+	// It has only two transitions, both of which are empty string transitions
+	// one leading to start state of (first)
+	// another leading to start state of (second).
+	final HashMap<String, HashSet<String>> newStartStateTransitions =
+	    new HashMap<>();
+	newStartStateTransitions.put("",
+            new HashSet<String>(
+                Set.<String>of(
+                    first.startState,
+		    // Append (suffix) to name of the start state in (second)
+		    // if it already exist in (first).
+		    // Otherwise, do nothing.
+		    second.startState +
+		    (duplicateStates.contains(second.startState) ? suffix : "")
+                )
+            )
+        );
+	union.transitionFunction.put(
+            newStartState, newStartStateTransitions);
+
+	// Construct empty string transitions map.
+	union.emptyStringTransitions.putAll(first.emptyStringTransitions);
+	for (String state : second.emptyStringTransitions.keySet()) {
+	    String stateName = state;
+	    if (duplicateStates.contains(state)) {
+		stateName += suffix;
+	    }
+	    HashSet<String> correctedSet = new HashSet<>();
+	    for (String x : second.emptyStringTransitions.get(state)) {
+		// If (x) is a duplicate state, suffix it with value of (suffix)
+		// so it refers to (x) in (second) not in (first).
+		// This is because we're handling transitions in (second)
+		// so if state (q) is in both (first) and (second)
+		// we interpreter it as belonging to (second).
+		correctedSet.add(
+                    x + (duplicateStates.contains(x) ? suffix : "")
+                );
+	    }
+	    union.emptyStringTransitions.put(stateName, correctedSet);
+	}
+
+	// the new start state has two empty string transitions
+	// one leading to start state of (first)
+	// another leading to start state of (second)
+	union.emptyStringTransitions.put(newStartState,
+            new HashSet<String>(
+                Set.<String>of(
+                    first.startState,
+		    // Append the value of (suffix) to name of the start state in (second)
+		    // if it already exist in (first).
+		    // Otherwise, do nothing.
+		    second.startState +
+		    (duplicateStates.contains(second.startState) ? suffix : "")
+                )
+            )
+        );
+
+	return union;
     }
 } // class NFA
