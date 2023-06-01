@@ -27,6 +27,19 @@ public class NFA {
     // which is already deterministic
     NFA thisDFACache = null;
 
+    private HashMap<String, HashSet<String>> mapOf(String state) {
+	return transitionFunction.getOrDefault(
+            state, new HashMap<String, HashSet<String>>());
+    }
+
+    private HashSet<String> symbolTransitionsOf(String state, String symbol) {
+	return mapOf(state).getOrDefault(symbol, new HashSet<String>());
+    }
+
+    private HashSet<String> epsilonStates(String state) {
+	return this.emptyStringTransitions.getOrDefault(state, new HashSet<String>());
+    }
+
     NFA() {
 	this.states = new HashSet<>();
 	this.alphabet = new HashSet<>();
@@ -122,8 +135,7 @@ public class NFA {
 	    // Empty string transitions will be fully computed later
 	    // when the transition function is fully computed.
 	    if (error.isEmpty()) {
-		HashMap<String, HashSet<String>> inStateSymbolsMap =
-		    this.transitionFunction.getOrDefault(inState, new HashMap<String, HashSet<String>>());
+		HashMap<String, HashSet<String>> inStateSymbolsMap = mapOf(inState);
 		if (inStateSymbolsMap.isEmpty()) {
 		    this.transitionFunction.put(inState, inStateSymbolsMap);
 		}
@@ -135,7 +147,7 @@ public class NFA {
 
 		// Empty string transitions.
 		if (!isDeterministic && symbol.equals("")) {
-		    HashSet<String> set = this.emptyStringTransitions.getOrDefault(inState, new HashSet<String>());
+		    HashSet<String> set = epsilonStates(inState);
 		    if (set.isEmpty()) {
 			this.emptyStringTransitions.put(inState, set);
 		    }
@@ -155,7 +167,7 @@ public class NFA {
 	// we now compute all the empty string transitions
 	// We iterater only through states known to have empty string transition
 	for (Map.Entry<String, HashSet<String>> e : this.emptyStringTransitions.entrySet()) {
-	    HashSet<String> allReachableStates = this.transitionFunction.get(e.getKey()).get("");
+	    HashSet<String> allReachableStates = symbolTransitionsOf(e.getKey(), "");
 	    while (true) {
 		int before = allReachableStates.size();
 		for (String reachedState : new HashSet<>(allReachableStates)) {
@@ -163,11 +175,7 @@ public class NFA {
 		    // thus calling transitionFunction.get(reachedState).get("") may fail
 		    // because (reachedState) may not have transitions labeled with ""
 		    // Thus we use the safer getOrDefault to protect ourselves from a null
-		    allReachableStates.addAll(
-                        this.transitionFunction.
-			get(reachedState).
-			getOrDefault("", new HashSet<String>())
-                    );
+		    allReachableStates.addAll(symbolTransitionsOf(reachedState, ""));
 		}
 		if (before == allReachableStates.size()) {
 		    // we fully expanded the transitions set.
@@ -217,8 +225,7 @@ public class NFA {
 	    // Thus if a state (q) has transitions with labels {a1, a2, ..., an}
 	    // then the keys its map are just those {a1, a2, ..., an}
 	    // and nothing else.
-	    HashSet<String> x = transitionFunction.getOrDefault(state, new HashMap<String, HashSet<String>>()).
-		getOrDefault(inputSymbol, new HashSet<String>());
+	    HashSet<String> x = symbolTransitionsOf(state, inputSymbol);
 	    HashSet<String> y = expand(x);
 	    outputSpace.addAll(y);
 	}
@@ -241,7 +248,7 @@ public class NFA {
 	    // not all states have empty string transitions
 	    // thus calling get on emptyStringTransitions may fail
 	    // Hence, use the safer getOrDefault
-	    outputSpace.addAll(emptyStringTransitions.getOrDefault(state, new HashSet<String>()));
+	    outputSpace.addAll(epsilonStates(state));
 	}
 	return outputSpace;
     }
@@ -465,11 +472,7 @@ public class NFA {
 		stateName += suffix;
 	    }
 	    HashMap<String, HashSet<String>> correctedMap = new HashMap<>();
-	    for (Map.Entry<String, HashSet<String>> e :
-		     second.transitionFunction.
-		     getOrDefault(state, new HashMap<String, HashSet<String>>()).
-		     entrySet()
-            ) {
+	    for (Map.Entry<String, HashSet<String>> e : second.mapOf(state).entrySet()) {
 		// e.getKey() is a symbol from second.alphabet.
 		// e.getValue() is all states reachable from (state)
 		// when reading symbol e.getKey()
