@@ -1,9 +1,9 @@
 package com.computation.automata;
 
 import java.util.Arrays;
-import java.util.Formatter;
 import java.util.function.Function;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
 import java.util.ArrayList;
 import java.util.TreeSet;
@@ -58,10 +58,7 @@ public class NFA {
 
 	this.alphabet = new HashSet<>(Set.<String>of(alphabet));
 	this.transitionFunction = new HashMap<>();
-
-	// store states appearing in transitions of the form {X, "", {A, B, C, ...}}
-	// thus states that have transitions labeled with the empty string.
-	HashSet<String> statesWithEmptyStringTransitions = new HashSet<>();
+	this.emptyStringTransitions = new HashMap<>();
 
 	for(Object[] transitionArray : transitions) {
 	    if (transitionArray.length != 3) {
@@ -74,18 +71,18 @@ public class NFA {
 
 	    String inState = (String)transitionArray[0];
 	    String symbol = (String)transitionArray[1];
-	    Object[] outStates = (Object[])transitionArray[2];
-
-	    if (symbol.equals("")) {
-		if (isDeterministic) {
-		    error.append("This automaton is deterministic, but transition '" +
-				 new Formatter().format("{\"%s\", \"\", %s}", inState, Arrays.asList(outStates).toString()).toString() +
-				 "' has empty string label\n");
-		} else {
-		    // if this automaton object is nondeterministic
-		    // and current transition has the empty string
-		    // then store input state (inState)
-		    statesWithEmptyStringTransitions.add(inState);
+	    ArrayList<String> outStates = new ArrayList<>();
+	    {
+		Object[] x = (Object[])transitionArray[2];
+		for(int i = 0; i < x.length; i++) {
+		    try {
+			outStates.add((String)x[i]);
+		    } catch (ClassCastException e) {
+			error.append(
+                            "Element %s in transition {\"%s\", \"%s\", %s} must be a String object".
+			    formatted(x[i], inState, symbol, Arrays.asList(x))
+                        );
+		    }
 		}
 	    }
 
@@ -105,15 +102,43 @@ public class NFA {
 	    }
 
 	    // detect if transition output set contains a new state not already in the (states) array
-	    for (Object outState : outStates) {
-		if (outState instanceof String) {
-		    if (!this.states.contains(outState)) {
-			error.append(
-                            "State '" + outState + "' must be included " +
-                            "in the (states) array" + "\n");
+	    for (String outState : outStates) {
+		if (!this.states.contains(outState)) {
+		    error.append(
+                       "State '" + outState + "' must be included " +
+                        "in the (states) array" + "\n");
+		}
+	    }
+
+	    if (isDeterministic && symbol.equals("")) {
+		error.append("This automaton is deterministic, but transition '" +
+                    "{\"%s\", \"\", %s}".formatted(inState, outStates.toString()) +
+                    "' has empty string label\n");
+	    }
+
+	    // Construct transition function and
+	    // partially compute empty string transitions.
+	    // Empty string transitions will be fully computed later
+	    // when the transition function is fully computed.
+	    if (error.isEmpty()) {
+		HashMap<String, HashSet<String>> inStateSymbolsMap =
+		    this.transitionFunction.getOrDefault(inState, new HashMap<String, HashSet<String>>());
+		if (inStateSymbolsMap.isEmpty()) {
+		    this.transitionFunction.put(inState, inStateSymbolsMap);
+		}
+		HashSet<String> symbolOutputsSet = inStateSymbolsMap.getOrDefault(symbol, new HashSet<String>());
+		if (symbolOutputsSet.isEmpty()) {
+		    inStateSymbolsMap.put(symbol, symbolOutputsSet);
+		}
+		symbolOutputsSet.addAll(outStates);
+
+		// Empty string transitions.
+		if (!isDeterministic && symbol.equals("")) {
+		    HashSet<String> set = this.emptyStringTransitions.getOrDefault(inState, new HashSet<String>());
+		    if (set.isEmpty()) {
+			this.emptyStringTransitions.put(inState, set);
 		    }
-		} else {
-		    error.append("Element '" + outState + "' must be a string.\n");
+		    set.addAll(outStates);
 		}
 	    }
 	}
@@ -125,48 +150,23 @@ public class NFA {
 	    this.acceptStates = new HashSet<>(Set.<String>of(acceptStates));
 	}
 
-	// for each state X, go through each symbol (a) creating a set
-	// corresponding to that symbol containing all states reachable
-	// from state X by reading symbol (a)
-	// store this symbol-set correspondce in a map in (transitionfunction)
-	// each map created below will later be filled with the actual states
-	// reachable from state (X) by reading symbol (a)
-	for (String state : this.states) {
-	    HashMap<String, HashSet<String>> stateTransitions = new HashMap<>();
-	    for (String symbol : this.alphabet) {
-		// the map is empty here
-		stateTransitions.put(symbol, new HashSet<>());
-	    }
-	    this.transitionFunction.put(state, stateTransitions);
-	}
-
-	// Fill in the maps for each symbol for each state
-	for (Object[] transitionArray : transitions) {
-	    String inState = (String)transitionArray[0];
-	    String symbol = (String)transitionArray[1];
-	    HashSet<String> set = this.transitionFunction.get(inState).get(symbol);
-	    for (Object outState : (Object[])transitionArray[2]) {
-		set.add((String)outState);
-	    }
-	}
-
 	// Now we have the complete transition function,
 	// we now compute all the empty string transitions
-	this.emptyStringTransitions = new HashMap<>();
 	// We iterater only through states known to have empty string transition
-	for (String state : statesWithEmptyStringTransitions) {
-	    // here it's different from for loop before, the last .get("") part
-	    // will always succeed because all states in (stateswithemptystringtransitions)
-	    // are guaranteed to have at least one empty string transition
-	    HashSet<String> allReachableStates = this.transitionFunction.get(state).get("");
+	for (Map.Entry<String, HashSet<String>> e : this.emptyStringTransitions.entrySet()) {
+	    HashSet<String> allReachableStates = this.transitionFunction.get(e.getKey()).get("");
 	    while (true) {
 		int before = allReachableStates.size();
 		for (String reachedState : new HashSet<>(allReachableStates)) {
-		    // state stored in (reachedState) may not have empty string transitions
-		    // thus calling transitionfunction.get(reachedState).get("") may fail
-		    // because (reachedState) may not transitions labeled with ""
+		    // Not all states stored in (reachedState) have empty string transitions
+		    // thus calling transitionFunction.get(reachedState).get("") may fail
+		    // because (reachedState) may not have transitions labeled with ""
 		    // Thus we use the safer getOrDefault to protect ourselves from a null
-		    allReachableStates.addAll(this.transitionFunction.get(reachedState).getOrDefault("", new HashSet<String>()));
+		    allReachableStates.addAll(
+                        this.transitionFunction.
+			get(reachedState).
+			getOrDefault("", new HashSet<String>())
+                    );
 		}
 		if (before == allReachableStates.size()) {
 		    // we fully expanded the transitions set.
@@ -177,7 +177,7 @@ public class NFA {
 	    // store full expanded path for this state
 	    // now we know all the states we can reach when reading
 	    // an empty string on this (state)
-	    this.emptyStringTransitions.put(state, allReachableStates);
+	    e.setValue(allReachableStates);
 	}
     } // constructor NFA
 
@@ -199,7 +199,25 @@ public class NFA {
 	    // add all reachable states from X by reading (inputSymbol)
 	    // after that expand the set you just obtained by following
 	    // all empty string transitions, if any
-	    HashSet<String> x = transitionFunction.get(state).get(inputSymbol);
+
+	    // The use of getOrDefault with transitionFunction is that
+	    // the map (transitionFunction) has key only those states
+	    // with transitions going out of them
+	    // Thus if a state (q) is reached but once the automaton
+	    // is there it can not go to other state, then (q)
+	    // will not be a key in (transitionFunction)
+	    // Such state (q) can used as a sink (failure) state
+	    // When the automaton can not recover anymore.
+
+	    // The second use of getOrDefault is because
+	    // even those states who made it as keys in (transitionFunction)
+	    // their associated maps do not contain
+	    // every single alphabet symbol as keys
+	    // Thus if a state (q) has transitions with labels {a1, a2, ..., an}
+	    // then the keys its map are just those {a1, a2, ..., an}
+	    // and nothing else.
+	    HashSet<String> x = transitionFunction.getOrDefault(state, new HashMap<String, HashSet<String>>()).
+		getOrDefault(inputSymbol, new HashSet<String>());
 	    HashSet<String> y = expand(x);
 	    outputSpace.addAll(y);
 	}
