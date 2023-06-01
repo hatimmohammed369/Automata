@@ -221,7 +221,7 @@ public class NFA {
 
     public static enum Computation {Accept, Reject};
     public Computation compute(String input, boolean logging) {
-	if (logging) System.out.println("Computing on input '" + input + "'");
+	if (logging) System.err.println("Computing on input '" + input + "'");
 
 	// expand the start set with all states reachable from the start start
 	// with empty string transitions
@@ -234,20 +234,21 @@ public class NFA {
 		System.exit(1);
 	    }
 	    if (logging) {
-		System.out.println(automatonStates + " reading '" + next + "'");
+		System.err.println(automatonStates + " reading '" + next + "'");
 	    }
 
 	    // the actual computation
 	    automatonStates = move(automatonStates, next);
 
 	    if (logging) {
-		System.out.println("=> " + automatonStates + "\n");
+		System.err.println("=> " + automatonStates + "\n");
 	    }
 	    if (automatonStates.isEmpty()) {
 		// No new states will be reached
 		// if there are no states at all
 		// So if we get an empty set during computation
 		// just stop.
+		System.err.println("Early aborting computation because the automaton lost all states");
 		break;
 	    }
 	}
@@ -260,7 +261,7 @@ public class NFA {
 	    }
 	}
 
-	if (logging) System.out.println(result + "ed input '" + input + "'");
+	if (logging) System.err.println(result + "ed input '" + input + "'");
 
 	return result;
     }
