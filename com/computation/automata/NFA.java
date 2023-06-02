@@ -36,7 +36,7 @@ public class NFA {
 	return mapOf(state).getOrDefault(symbol, new HashSet<String>());
     }
 
-    private HashSet<String> epsilonStates(String state) {
+    private HashSet<String> eStatesOf(String state) {
 	return this.emptyStringTransitions.getOrDefault(state, new HashSet<String>());
     }
 
@@ -147,7 +147,7 @@ public class NFA {
 
 		// Empty string transitions.
 		if (!isDeterministic && symbol.equals("")) {
-		    HashSet<String> set = epsilonStates(inState);
+		    HashSet<String> set = eStatesOf(inState);
 		    if (set.isEmpty()) {
 			this.emptyStringTransitions.put(inState, set);
 		    }
@@ -203,7 +203,8 @@ public class NFA {
     public HashSet<String> move(Collection<String> inputSpace,
 				String inputSymbol) {
 	HashSet<String> outputSpace = new HashSet<>();
-	for (String state : inputSpace) {
+	HashSet<String> inputSet = new HashSet<String>(expand(inputSpace));
+	for (String state : inputSet) {
 	    // for each state X in the input space
 	    // add all reachable states from X by reading (inputSymbol)
 	    // after that expand the set you just obtained by following
@@ -248,7 +249,7 @@ public class NFA {
 	    // not all states have empty string transitions
 	    // thus calling get on emptyStringTransitions may fail
 	    // Hence, use the safer getOrDefault
-	    outputSpace.addAll(epsilonStates(state));
+	    outputSpace.addAll(eStatesOf(state));
 	}
 	return outputSpace;
     }
@@ -650,7 +651,7 @@ public class NFA {
 	// add an empty string transition poiting to
 	// the start state in (second).
 	for (String state : first.acceptStates) {
-	    HashSet<String> epsilonSet = result.epsilonStates(state);
+	    HashSet<String> epsilonSet = result.eStatesOf(state);
 	    if (epsilonSet.isEmpty()) {
 		result.emptyStringTransitions.put(state, epsilonSet);
 	    }
