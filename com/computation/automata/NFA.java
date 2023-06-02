@@ -405,6 +405,18 @@ public class NFA {
     }
 
     public static NFA union(NFA first, NFA second, String newStartState, String suffix) {
+	if (suffix.isEmpty()) {
+	    System.err.println("Naming suffix must be non-empty string.");
+	    System.exit(1);
+	}
+	if (first.states.contains(newStartState)) {
+	    System.err.println("New start state is already in first automaton.");
+	    System.exit(1);
+	}
+	if (second.states.contains(newStartState)) {
+	    System.err.println("New start state is already in second automaton.");
+	    System.exit(1);
+	}
 	if (first.states.contains(newStartState)) {
 	    System.err.println(
                 "First automaton already has state '" +
@@ -551,5 +563,102 @@ public class NFA {
         );
 
 	return union;
+    }
+
+    public static NFA concatenate(NFA first, NFA second, String suffix) {
+	if (suffix.isEmpty()) {
+	    System.err.println("Naming suffix must be non-empty string.");
+	    System.exit(1);
+	}
+	NFA result = new NFA();
+	result.isDeterministic = false;
+
+	result.alphabet.addAll(first.alphabet);
+	result.alphabet.addAll(second.alphabet);
+	result.alphabet.add("");
+
+	// Add all states in first automaton
+	result.states.addAll(first.states);
+	HashSet<String> duplicateStates = new HashSet<>();
+	// Add all states in second automaton, but
+	// a state (q) is in both (first) and (second)
+	// suffix its name with string (suffix).
+	for (String state : second.states) {
+	    if (result.states.contains(state)) {
+		duplicateStates.add(state);
+		state += suffix;
+	    }
+	    result.states.add(state);
+	}
+
+	// Set start state, which is the start state in (first)
+	result.startState = first.startState;
+
+	// Set the accept states
+	// Which are the accept states in (second)
+	// with (suffix) appended when accept state (q) in (second)
+	// is a state in (first).
+	for (String state : second.acceptStates) {
+	    if (duplicateStates.contains(state)) {
+		state += suffix;
+	    }
+	    result.acceptStates.add(state);
+	}
+
+	// Add all transitions in first automaton
+	result.transitionFunction.putAll(first.transitionFunction);
+	// Add all transitions in second automaton
+	// but when state (q) in (second) appears either as
+	// a key in the transitions map or in the outputs set in
+	// some map in the transitions map, suffix that state (q).
+	for (Map.Entry<String,HashMap<String,HashSet<String>>> stateMapPair : second.transitionFunction.entrySet()) {
+	    HashMap<String, HashSet<String>> stateCorrectedMap = stateMapPair.getValue();
+	    for (Map.Entry<String, HashSet<String>> symbolSetPair : stateCorrectedMap.entrySet()) {
+		HashSet<String> set = symbolSetPair.getValue();
+		for (String state : new HashSet<String>(set)) {
+		    if (duplicateStates.contains(state)) {
+			set.remove(state);
+			set.add(state + suffix);
+		    }
+		}
+	    }
+	    String state = stateMapPair.getKey();
+	    if (duplicateStates.contains(state)) {
+		result.transitionFunction.remove(state);
+		result.transitionFunction.put(state + suffix, stateCorrectedMap);
+	    }
+	}
+
+	// Handle empty string transitions.
+	result.emptyStringTransitions.putAll(first.emptyStringTransitions);
+	for (Map.Entry<String, HashSet<String>> stateSetPair : second.emptyStringTransitions.entrySet()) {
+	    HashSet<String> stateCorrectedSet = new HashSet<>(stateSetPair.getValue());
+	    for (String x : new HashSet<String>(stateCorrectedSet)) {
+		if (duplicateStates.contains(x)) {
+		    stateCorrectedSet.remove(x);
+		    stateCorrectedSet.add(x + suffix);
+		}
+	    }
+	    String state = stateSetPair.getKey();
+	    if (duplicateStates.contains(state)) {
+		state += suffix;
+	    }
+	    result.emptyStringTransitions.put(state, stateCorrectedSet);
+	}
+
+	// For each accept state in (first)
+	// add an empty string transition poiting to
+	// the start state in (second).
+	for (String state : first.acceptStates) {
+	    HashSet<String> epsilonSet = result.epsilonStates(state);
+	    if (epsilonSet.isEmpty()) {
+		result.emptyStringTransitions.put(state, epsilonSet);
+	    }
+	    epsilonSet.add(
+                second.startState +
+		(duplicateStates.contains(second.startState) ? suffix : "")
+            );
+	}
+	return result;
     }
 } // class NFA
