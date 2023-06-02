@@ -406,32 +406,31 @@ public class NFA {
     }
 
     public static NFA union(NFA first, NFA second, String newStartState, String suffix) {
+	StringBuilder error = new StringBuilder();
 	if (suffix.isEmpty()) {
-	    System.err.println("Naming suffix must be non-empty string.");
-	    System.exit(1);
+	    error.append("Naming suffix must be non-empty string.\n");
 	}
 	if (first.states.contains(newStartState)) {
-	    System.err.println("New start state is already in first automaton.");
-	    System.exit(1);
+	    error.append("New start state is already in first automaton.\n");
 	}
 	if (second.states.contains(newStartState)) {
-	    System.err.println("New start state is already in second automaton.");
-	    System.exit(1);
+	    error.append("New start state is already in second automaton.\n");
 	}
 	if (first.states.contains(newStartState)) {
-	    System.err.println(
+	    error.append(
                 "First automaton already has state '" +
-		newStartState + "'");
-	    System.exit(1);
+		newStartState + "'\n");
 	}
 	if (second.states.contains(newStartState)) {
-	    System.err.println(
+	    error.append(
                 "Second automaton already has state '" +
-		newStartState + "'");
-	    System.exit(1);
+		newStartState + "'\n");
 	}
 	if (suffix.isEmpty()) {
-	    System.err.println("Provided suffix must be non-empty string.");
+	    error.append("Provided suffix must be non-empty string.\n");
+	}
+	if (!error.isEmpty()) {
+	    System.err.println(error);
 	    System.exit(1);
 	}
 
