@@ -452,12 +452,11 @@ public class NFA {
 	    // is already in (union.states), append string in (suffix)
 	    // so that names don't clash and the two automata
 	    // operate separately when running (union).
-	    String stateName = state;
 	    if (union.states.contains(state)) {
-		stateName += suffix;
 		duplicateStates.add(state);
+		state += suffix;
 	    }
-	    union.states.add(stateName);
+	    union.states.add(state);
 	}
 
 	union.acceptStates.addAll(first.acceptStates);
@@ -465,11 +464,10 @@ public class NFA {
 	    // Do the same as above when adding states to (union)
 	    // accept states must also be handled similary
 	    // to avoid name clashes.
-	    String stateName = state;
 	    if (duplicateStates.contains(state)) {
-		stateName += suffix;
+		state += suffix;
 	    }
-	    union.acceptStates.add(stateName);
+	    union.acceptStates.add(state);
 	}
 
 	// Construct transition function.
@@ -533,7 +531,7 @@ public class NFA {
 		stateName += suffix;
 	    }
 	    HashSet<String> correctedSet = new HashSet<>();
-	    for (String x : second.emptyStringTransitions.get(state)) {
+	    for (String x : second.eStatesOf(state)) {
 		// If (x) is a duplicate state, suffix it with value of (suffix)
 		// so it refers to (x) in (second) not in (first).
 		// This is because we're handling transitions in (second)
@@ -611,11 +609,11 @@ public class NFA {
 	// but when state (q) in (second) appears either as
 	// a key in the transitions map or in the outputs set in
 	// some map in the transitions map, suffix that state (q).
-	for (Map.Entry<String,HashMap<String,HashSet<String>>> stateMapPair : second.transitionFunction.entrySet()) {
+	for (Map.Entry<String,HashMap<String,HashSet<String>>> stateMapPair : Map.copyOf(second.transitionFunction).entrySet()) {
 	    HashMap<String, HashSet<String>> stateCorrectedMap = stateMapPair.getValue();
 	    for (Map.Entry<String, HashSet<String>> symbolSetPair : stateCorrectedMap.entrySet()) {
 		HashSet<String> set = symbolSetPair.getValue();
-		for (String state : new HashSet<String>(set)) {
+		for (String state : set.toArray(new String[]{})) {
 		    if (duplicateStates.contains(state)) {
 			set.remove(state);
 			set.add(state + suffix);
@@ -631,9 +629,9 @@ public class NFA {
 
 	// Handle empty string transitions.
 	result.emptyStringTransitions.putAll(first.emptyStringTransitions);
-	for (Map.Entry<String, HashSet<String>> stateSetPair : second.emptyStringTransitions.entrySet()) {
+	for (Map.Entry<String, HashSet<String>> stateSetPair : Map.copyOf(second.emptyStringTransitions).entrySet()) {
 	    HashSet<String> stateCorrectedSet = new HashSet<>(stateSetPair.getValue());
-	    for (String x : new HashSet<String>(stateCorrectedSet)) {
+	    for (String x :  stateCorrectedSet.toArray(new String[]{})) {
 		if (duplicateStates.contains(x)) {
 		    stateCorrectedSet.remove(x);
 		    stateCorrectedSet.add(x + suffix);
