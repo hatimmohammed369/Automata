@@ -662,4 +662,62 @@ public class NFA {
 	}
 	return result;
     }
+
+    public static NFA star(NFA automaton, String newStartState) {
+	if (automaton.states.contains(newStartState)) {
+	    System.err.println("New start state is already in this automaton.");
+	    System.exit(1);
+	}
+	NFA result = new NFA();
+	result.startState = newStartState;
+	result.isDeterministic = false;
+
+	result.alphabet.addAll(automaton.alphabet);
+	result.alphabet.add("");
+
+	result.states.addAll(automaton.states);
+	result.states.add(newStartState);
+
+	result.acceptStates.addAll(automaton.acceptStates);
+	result.acceptStates.add(newStartState);
+
+	result.transitionFunction.putAll(automaton.transitionFunction);
+	result.emptyStringTransitions.putAll(automaton.emptyStringTransitions);
+
+	// For each accept state in (automaton)
+	// add an empty string transition leading
+	// to the new start state
+	for (String state : automaton.acceptStates) {
+	    // Add transition in (transitionFunction).
+	    HashMap<String, HashSet<String>> stateMap = automaton.mapOf(state);
+	    if (stateMap.isEmpty()) {
+		result.transitionFunction.put(state, stateMap);
+	    }
+	    stateMap.put("",
+                new HashSet<String>(Set.<String>of(newStartState))
+            );
+
+	    // Add transition in (emptyStringTransitions)
+	    HashSet<String> epsilonSet = automaton.eStatesOf(state);
+	    if (epsilonSet.isEmpty()) {
+		result.emptyStringTransitions.put(state, epsilonSet);
+	    }
+	    epsilonSet.add(newStartState);
+	}
+
+	// Add one empty string transition
+	// for the new start state
+	// leading to the start state in (automaton)
+	result.transitionFunction.put(newStartState,
+            new HashMap<String, HashSet<String>>()
+        );
+	result.mapOf(newStartState).put(
+            "", new HashSet<String>(Set.<String>of(automaton.startState))
+        );
+	result.emptyStringTransitions.put(newStartState,
+            new HashSet<String>(Set.<String>of(automaton.startState))
+        );
+
+	return result;
+    }
 } // class NFA
