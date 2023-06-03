@@ -15,10 +15,8 @@ public class NFA {
     HashSet<String> states;
     HashSet<String> alphabet;
     // in (transitionFunction) keys are states
-    // keys in (HashMap<String, HashSet<String>>) are alphabet symbols
-    // WHENEVER USING (transitionFunction) USE getOrDefault.
+    // keys in (HashMap<String, HashSet<String>>) are alphabet symbols (regular expressions in GNFAs)
     HashMap<String, HashMap<String, HashSet<String>>> transitionFunction;
-    HashMap<String, HashSet<String>> emptyStringTransitions;
     String startState;
     HashSet<String> acceptStates;
     boolean isDeterministic;
@@ -36,15 +34,10 @@ public class NFA {
 	return mapOf(state).getOrDefault(symbol, new HashSet<String>());
     }
 
-    private HashSet<String> eStatesOf(String state) {
-	return this.emptyStringTransitions.getOrDefault(state, new HashSet<String>());
-    }
-
     NFA() {
 	this.states = new HashSet<>();
 	this.alphabet = new HashSet<>();
 	this.transitionFunction = new HashMap<>();
-	this.emptyStringTransitions = new HashMap<>();
 	this.startState = null;
 	this.acceptStates = new HashSet<>();
 	this.isDeterministic = false;
@@ -72,8 +65,8 @@ public class NFA {
 
 	this.alphabet = new HashSet<>(Set.<String>of(alphabet));
 	this.transitionFunction = new HashMap<>();
-	this.emptyStringTransitions = new HashMap<>();
 
+	boolean emptyStringTransitionFound = false;
 	for(Object[] transitionArray : transitions) {
 	    if (transitionArray.length != 3) {
 		error.append("Transition array " +
@@ -124,16 +117,20 @@ public class NFA {
 		}
 	    }
 
-	    if (isDeterministic && symbol.equals("")) {
-		error.append("This automaton is deterministic, but transition '" +
-                    "{\"%s\", \"\", %s}".formatted(inState, outStates.toString()) +
-                    "' has empty string label\n");
+	    if (symbol.equals("")) {
+		emptyStringTransitionFound = true;
+		if (isDeterministic) {
+		    // Since the error string becomes non-empty
+		    // we can not have (isDeterministic) true
+		    // when empty string transitions exist in an NFA object.
+		    error.append("This automaton is deterministic, but transition '" +
+				 "{\"%s\", \"\", %s}".formatted(inState, outStates.toString()) +
+				 "' has empty string label\n");
+		}
 	    }
 
 	    // Construct transition function and
 	    // partially compute empty string transitions.
-	    // Empty string transitions will be fully computed later
-	    // when the transition function is fully computed.
 	    if (error.isEmpty()) {
 		HashMap<String, HashSet<String>> inStateSymbolsMap = mapOf(inState);
 		if (inStateSymbolsMap.isEmpty()) {
@@ -145,49 +142,22 @@ public class NFA {
 		}
 		symbolOutputsSet.addAll(outStates);
 
-		// Empty string transitions.
-		if (!isDeterministic && symbol.equals("")) {
-		    HashSet<String> set = eStatesOf(inState);
-		    if (set.isEmpty()) {
-			this.emptyStringTransitions.put(inState, set);
-		    }
-		    set.addAll(outStates);
-		}
 	    }
+	}
+
+	if (!isDeterministic && !emptyStringTransitionFound) {
+	    // DFAs are NFAs by definition
+	    // but no need to have (isDeterministic) false
+	    // when there's no empty string transitions.
+	    isDeterministic = true;
 	}
 
 	if (!error.isEmpty()) {
 	    System.err.println(error);
 	    System.exit(1);
-	} else {
-	    this.acceptStates = new HashSet<>(Set.<String>of(acceptStates));
 	}
 
-	// Now we have the complete transition function,
-	// we now compute all the empty string transitions
-	// We iterater only through states known to have empty string transition
-	for (Map.Entry<String, HashSet<String>> e : this.emptyStringTransitions.entrySet()) {
-	    HashSet<String> allReachableStates = symbolTransitionsOf(e.getKey(), "");
-	    while (true) {
-		int before = allReachableStates.size();
-		for (String reachedState : new HashSet<>(allReachableStates)) {
-		    // Not all states stored in (reachedState) have empty string transitions
-		    // thus calling transitionFunction.get(reachedState).get("") may fail
-		    // because (reachedState) may not have transitions labeled with ""
-		    // Thus we use the safer getOrDefault to protect ourselves from a null
-		    allReachableStates.addAll(symbolTransitionsOf(reachedState, ""));
-		}
-		if (before == allReachableStates.size()) {
-		    // we fully expanded the transitions set.
-		    // no more new states are reachable
-		    break;
-		}
-	    }
-	    // store full expanded path for this state
-	    // now we know all the states we can reach when reading
-	    // an empty string on this (state)
-	    e.setValue(allReachableStates);
-	}
+	this.acceptStates = new HashSet<>(Set.<String>of(acceptStates));
     } // constructor NFA
 
     public NFA(
@@ -209,23 +179,6 @@ public class NFA {
 	    // add all reachable states from X by reading (inputSymbol)
 	    // after that expand the set you just obtained by following
 	    // all empty string transitions, if any
-
-	    // The use of getOrDefault with transitionFunction is that
-	    // the map (transitionFunction) has key only those states
-	    // with transitions going out of them
-	    // Thus if a state (q) is reached but once the automaton
-	    // is there it can not go to other state, then (q)
-	    // will not be a key in (transitionFunction)
-	    // Such state (q) can used as a sink (failure) state
-	    // When the automaton can not recover anymore.
-
-	    // The second use of getOrDefault is because
-	    // even those states who made it as keys in (transitionFunction)
-	    // their associated maps do not contain
-	    // every single alphabet symbol as keys
-	    // Thus if a state (q) has transitions with labels {a1, a2, ..., an}
-	    // then the keys its map are just those {a1, a2, ..., an}
-	    // and nothing else.
 	    HashSet<String> x = symbolTransitionsOf(state, inputSymbol);
 	    HashSet<String> y = expand(x);
 	    outputSpace.addAll(y);
@@ -239,17 +192,27 @@ public class NFA {
     public HashSet<String> expand(Collection<String> inputSpace) {
 	// Start with the input set
 	HashSet<String> outputSpace = new HashSet<>(inputSpace);
-	if (emptyStringTransitions.isEmpty()) {
-	    // If this automaton has empty string transitions
-	    // then this method will effectively do nothing
-	    // so just return the input set alone.
+	if (isDeterministic) {
+	    // no empty string transitions
+	    // just return the input set
 	    return outputSpace;
 	}
+	// Expand the input set.
+	// For state (q) in the input set,
+	// add states you can reach from (q) using
+	// a single empty string transition.
 	for (String state : inputSpace) {
-	    // not all states have empty string transitions
-	    // thus calling get on emptyStringTransitions may fail
-	    // Hence, use the safer getOrDefault
-	    outputSpace.addAll(eStatesOf(state));
+	    outputSpace.addAll(symbolTransitionsOf(state, ""));
+	}
+	// Expand the output set itself now.
+	while (true) {
+	    int before = outputSpace.size();
+	    for (String state : new HashSet<>(outputSpace)) {
+		outputSpace.addAll(symbolTransitionsOf(state, ""));
+	    }
+	    if (before == outputSpace.size()) {
+		break;
+	    }
 	}
 	return outputSpace;
     }
@@ -523,43 +486,6 @@ public class NFA {
 	union.transitionFunction.put(
             newStartState, newStartStateTransitions);
 
-	// Construct empty string transitions map.
-	union.emptyStringTransitions.putAll(first.emptyStringTransitions);
-	for (String state : second.emptyStringTransitions.keySet()) {
-	    String stateName = state;
-	    if (duplicateStates.contains(state)) {
-		stateName += suffix;
-	    }
-	    HashSet<String> correctedSet = new HashSet<>();
-	    for (String x : second.eStatesOf(state)) {
-		// If (x) is a duplicate state, suffix it with value of (suffix)
-		// so it refers to (x) in (second) not in (first).
-		// This is because we're handling transitions in (second)
-		// so if state (q) is in both (first) and (second)
-		// we interpreter it as belonging to (second).
-		correctedSet.add(
-                    x + (duplicateStates.contains(x) ? suffix : "")
-                );
-	    }
-	    union.emptyStringTransitions.put(stateName, correctedSet);
-	}
-
-	// the new start state has two empty string transitions
-	// one leading to start state of (first)
-	// another leading to start state of (second)
-	union.emptyStringTransitions.put(newStartState,
-            new HashSet<String>(
-                Set.<String>of(
-                    first.startState,
-		    // Append the value of (suffix) to name of the start state in (second)
-		    // if it already exist in (first).
-		    // Otherwise, do nothing.
-		    second.startState +
-		    (duplicateStates.contains(second.startState) ? suffix : "")
-                )
-            )
-        );
-
 	return union;
     }
 
@@ -627,36 +553,6 @@ public class NFA {
 	    }
 	}
 
-	// Handle empty string transitions.
-	result.emptyStringTransitions.putAll(first.emptyStringTransitions);
-	for (Map.Entry<String, HashSet<String>> stateSetPair : Map.copyOf(second.emptyStringTransitions).entrySet()) {
-	    HashSet<String> stateCorrectedSet = new HashSet<>(stateSetPair.getValue());
-	    for (String x :  stateCorrectedSet.toArray(new String[]{})) {
-		if (duplicateStates.contains(x)) {
-		    stateCorrectedSet.remove(x);
-		    stateCorrectedSet.add(x + suffix);
-		}
-	    }
-	    String state = stateSetPair.getKey();
-	    if (duplicateStates.contains(state)) {
-		state += suffix;
-	    }
-	    result.emptyStringTransitions.put(state, stateCorrectedSet);
-	}
-
-	// For each accept state in (first)
-	// add an empty string transition poiting to
-	// the start state in (second).
-	for (String state : first.acceptStates) {
-	    HashSet<String> epsilonSet = result.eStatesOf(state);
-	    if (epsilonSet.isEmpty()) {
-		result.emptyStringTransitions.put(state, epsilonSet);
-	    }
-	    epsilonSet.add(
-                second.startState +
-		(duplicateStates.contains(second.startState) ? suffix : "")
-            );
-	}
 	return result;
     }
 
@@ -679,7 +575,6 @@ public class NFA {
 	result.acceptStates.add(newStartState);
 
 	result.transitionFunction.putAll(automaton.transitionFunction);
-	result.emptyStringTransitions.putAll(automaton.emptyStringTransitions);
 
 	// For each accept state in (automaton)
 	// add an empty string transition leading
@@ -693,13 +588,6 @@ public class NFA {
 	    stateMap.put("",
                 new HashSet<String>(Set.<String>of(newStartState))
             );
-
-	    // Add transition in (emptyStringTransitions)
-	    HashSet<String> epsilonSet = automaton.eStatesOf(state);
-	    if (epsilonSet.isEmpty()) {
-		result.emptyStringTransitions.put(state, epsilonSet);
-	    }
-	    epsilonSet.add(newStartState);
 	}
 
 	// Add one empty string transition
@@ -710,9 +598,6 @@ public class NFA {
         );
 	result.mapOf(newStartState).put(
             "", new HashSet<String>(Set.<String>of(automaton.startState))
-        );
-	result.emptyStringTransitions.put(newStartState,
-            new HashSet<String>(Set.<String>of(automaton.startState))
         );
 
 	return result;
