@@ -535,10 +535,10 @@ public class NFA {
 	// but when state (q) in (second) appears either as
 	// a key in the transitions map or in the outputs set in
 	// some map in the transitions map, suffix that state (q).
-	for (Map.Entry<String,HashMap<String,HashSet<String>>> stateMapPair : Map.copyOf(second.transitionFunction).entrySet()) {
-	    HashMap<String, HashSet<String>> stateCorrectedMap = stateMapPair.getValue();
+	for (Map.Entry<String,HashMap<String,HashSet<String>>> stateMapPair : second.transitionFunction.entrySet()) {
+	    HashMap<String, HashSet<String>> stateCorrectedMap = new HashMap<>(stateMapPair.getValue());
 	    for (Map.Entry<String, HashSet<String>> symbolSetPair : stateCorrectedMap.entrySet()) {
-		HashSet<String> set = symbolSetPair.getValue();
+		HashSet<String> set = new HashSet<>(symbolSetPair.getValue());
 		for (String state : set.toArray(new String[]{})) {
 		    if (duplicateStates.contains(state)) {
 			set.remove(state);
