@@ -3,7 +3,7 @@ package com.computation.automata;
 import java.util.function.Function;
 import java.util.Collection;
 import java.util.Map;
-import java.util.Set;
+import java.util.List;
 import java.util.ArrayList;
 import java.util.TreeSet;
 import java.util.HashSet;
@@ -86,7 +86,7 @@ public class NFA {
 	for(Object[] transitionArray : transitions) {
 	    if (transitionArray.length != 3) {
 		error.append("Transition array " +
-                    Set.<Object>of(transitionArray) +
+                    List.of(transitionArray) +
 		    " must of the form " +
 		    "{{\"state-a\", \"input-symbol\", {\"state-0\", \"state-1\", \"state-2\", ...}}, ...}\"" +
                     "\n");
@@ -94,7 +94,10 @@ public class NFA {
 
 	    String state = (String)transitionArray[0];
 	    String symbol = (String)transitionArray[1];
-	    Set<String> outputSet = (Set<String>)transitionArray[2];
+	    ArrayList<String> outputSet = new ArrayList<>();
+	    for (Object o : List.of((Object[])transitionArray[2])) {
+		outputSet.add((String)o);
+	    }
 
 	    // detect if input state in this transition
 	    // contains a new state not already in the (states) array
@@ -216,7 +219,7 @@ public class NFA {
 
 	// expand the start set with all states reachable from the start start
 	// with empty string transitions
-	HashSet<String> automatonStates = expand(Set.<String>of(startState));
+	HashSet<String> automatonStates = expand(List.of(startState));
 
 	for (char c : input.toCharArray()) {
 	    String next = String.valueOf(c);
@@ -282,7 +285,7 @@ public class NFA {
 	    return s.toString();
 	};
 
-	thisDFACache.startState = nameStyle.apply(expand(Set.<String>of(this.startState)));
+	thisDFACache.startState = nameStyle.apply(expand(List.of(this.startState)));
 
 	ArrayList<HashSet<String>> powerSet = new ArrayList<>();
 	powerSet.add(new HashSet<String>()); // the empty set
@@ -357,7 +360,7 @@ public class NFA {
 	    // for each symbol fail state receives,
 	    // it just goes back to itself.
 	    // each of its transitions are {failStatename, symbol, {failStateName}}
-	    failStateTransitions.put(symbol, new HashSet<>(Set.<String>of(failStateName)));
+	    failStateTransitions.put(symbol, new HashSet<>(List.of(failStateName)));
 	}
 	thisDFACache.transitionFunction.put(failStateName, failStateTransitions);
 
@@ -463,7 +466,7 @@ public class NFA {
 	// one leading to start state of (first)
 	// another leading to start state of (second).
 	union.putTransition(union.startState, "",
-            Set.<String>of(
+            List.of(
                 first.startState,
                 // Append (suffix) to name of the start state in (second)
                 // if it already exist in (first).
@@ -556,7 +559,7 @@ public class NFA {
 	    s += suffix;
 	}
 	for (String state : first.acceptStates) {
-	    result.putTransition(state, "", Set.<String>of(s));
+	    result.putTransition(state, "", List.of(s));
 	}
 	return result;
     }
@@ -595,13 +598,13 @@ public class NFA {
 	for (String state : automaton.acceptStates) {
 	    // Add transition in (transitionFunction).
 	    result.putTransition(state, "",
-                Set.<String>of(automaton.startState));
+                List.of(automaton.startState));
 	}
 
 	// Add one empty string transition
 	// for the new start state
 	// leading to the start state in (automaton)
-	result.putTransition(newStartState, "", Set.<String>of(automaton.startState));
+	result.putTransition(newStartState, "", List.of(automaton.startState));
 
 	return result;
     }
