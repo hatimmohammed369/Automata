@@ -291,6 +291,8 @@ public class NFA {
 	ArrayList<HashSet<String>> powerSet = new ArrayList<>();
 	powerSet.add(new HashSet<String>()); // the empty set
 
+	// At first, mark all states as "unreachable"
+	HashSet<String> notReachableStates = new HashSet<>();
 	final String failStateName = "<" + failState + ">";
 	for (int size = 1; size <= this.states.size(); size++) {
 	    int current = powerSet.size();
@@ -318,6 +320,7 @@ public class NFA {
 
 		    if (addNewSubset) {
 			powerSet.add(newSubset); // so that we continue this iteration
+			notReachableStates.add(nameStyle.apply(newSubset));
 
 			final String newSubsetName = nameStyle.apply(newSubset);
 			thisDFACache.states.add(newSubsetName);
@@ -345,6 +348,9 @@ public class NFA {
 				symbolOutputs.add(failStateName);
 			    } else {
 				symbolOutputs.add(nameStyle.apply(x));
+				// But when some state appears in the output set
+				// of some transition, remove it from the "unreachable" list
+				notReachableStates.remove(nameStyle.apply(x));
 			    }
 			    newSubsetMap.put(symbol, symbolOutputs);
 			}
@@ -352,6 +358,11 @@ public class NFA {
 		    }
 		}
 	    }
+	}
+	// DONT FORGET TO REMOVE THE START STATE FROM "unreachable" LIST
+	notReachableStates.remove(thisDFACache.startState);
+	for (String s : notReachableStates) {
+	    thisDFACache.transitionFunction.remove(s);
 	}
 
 	// Add fail state and its transitions
