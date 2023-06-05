@@ -2,6 +2,7 @@ package com.computation.automata;
 
 import java.util.function.Function;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
@@ -365,6 +366,232 @@ public class NFA {
 	thisDFACache.transitionFunction.put(failStateName, failStateTransitions);
 
 	return thisDFACache;
+    }
+
+    // IF EXPRESSION IS NOT THE EMPTY STRING,
+    // NOT AN ALPHABET, AND NOT ALREADY PARAENTHESIZED
+    // THEN SURROUND IT WITH PARENTHESIS.
+    // (null) REPRESENTS THE EMPTY SET.
+    private String starRegex(String expr) {
+	if (expr == null) {
+	    // Staring the empty set gives the empty string
+	    return "";
+	}
+
+	if (expr.isEmpty()) {
+	    // Starring the empty string gives the empty string.
+	    return "";
+	}
+
+	if (this.alphabet.contains(expr)) {
+	    expr += "*";
+	} else if (expr.startsWith("(") && expr.endsWith(")")) {
+	    int nesting = 0;
+	    for (int i = 0;i < expr.length();i++) {
+		char c = expr.charAt(i);
+		if (c == '(') nesting++;
+		else if (c == ')') nesting--;
+
+		if (nesting == 0 && i != expr.length()-1) {
+		    nesting = -1;
+		    break;
+		}
+	    }
+	    if (nesting == -1) {
+		// First ( does not macth last )
+		// Add parenthesis
+		expr = "(" + expr + ")*";
+	    } else {
+		// First ( matches last )
+		// add star
+		expr += "*";
+	    }
+	} else {
+	    expr = "(" + expr + ")*";
+	}
+
+	return expr;
+    }
+
+    private String unionRegexes(Collection<String> exprs) {
+	if (exprs == null) return null;
+
+	StringBuilder unionExpr = new StringBuilder();
+
+	boolean allNulls = true;
+	for (String expr : exprs) {
+	    if (expr == null) {
+		// Adding the empty language has no effect.
+		continue;
+	    }
+	    int nesting = 0;
+	    for (int i = 0;i < expr.length();i++) {
+		char c = expr.charAt(i);
+		if (c == '(') nesting++;
+		else if (c == ')') nesting--;
+
+		if (nesting == 0 && c == '|') {
+		    nesting = -1;
+		    break;
+		}
+	    }
+	    if (nesting == -1) {
+		// (expr) is in form A|B|C|...
+		// add parenthesis to perserve the union operation.
+		expr = "(" + expr + ")";
+	    }
+	    unionExpr.append(expr + "|");
+	    allNulls = false;
+	}
+
+	if (allNulls) return null;
+
+	if (!unionExpr.isEmpty()) {
+	     // delete trailing |
+	    unionExpr.deleteCharAt(unionExpr.length() - 1);
+	} else {
+	    return "";
+	}
+
+	return unionExpr.toString();
+    }
+
+    private String concatRegexes(Collection<String> exprs) {
+	if (exprs == null) return null;
+
+	StringBuilder concatExpr = new StringBuilder();
+
+	for (String expr : exprs) {
+	    if (expr == null) {
+		// Concentating with the empty set yields the empty set.
+		return null;
+	    }
+	    if (expr.isEmpty()) {
+		// Concatenating with the empty string has no effect.
+		continue;
+	    }
+	    int nesting = 0;
+	    for (int i = 0;i < expr.length();i++) {
+		char c = expr.charAt(i);
+		if (c == '(') nesting++;
+		else if (c == ')') nesting--;
+
+		if (nesting == 0 && c == '|') {
+		    nesting = -1;
+		    break;
+		}
+	    }
+	    if (nesting == -1) {
+		// (expr) is in form A|B|C|...
+		// add parenthesis to perserve the union operation.
+		expr = "(" + expr + ")";
+	    }
+	    concatExpr.append(expr);
+	}
+
+	return concatExpr.toString();
+    }
+
+    public String toRegularExpression(List<String> removalSequence, String gStartState, String gAcceptState) {
+	if (!isDeterministic) {
+	    System.err.println("Invoking automaton must be deterministic");
+	    System.exit(1);
+	}
+	if (this.states.contains(gStartState)) {
+	    System.err.println("Choose another start state");
+	    System.exit(1);
+	}
+	if (this.states.contains(gAcceptState)) {
+	    System.err.println("Choose another start accept");
+	    System.exit(1);
+	}
+	{
+	    ArrayList<String> missing = new ArrayList<>();
+	    for (String state : this.states) {
+		if (!removalSequence.contains(state)) {
+		    missing.add(state);
+		}
+	    }
+	    if (!missing.isEmpty()) {
+		System.err.println("States " +missing+ " are not removed");
+		System.exit(1);
+	    }
+	}
+	HashMap<String, HashMap<String, ArrayList<String>>> function =
+	    new HashMap<>();
+	this.transitionFunction.forEach((state, symbolsMap) -> {
+	    HashMap<String, ArrayList<String>> statesMap = function.getOrDefault(state, new HashMap<>());
+	    if (statesMap.isEmpty()) function.put(state, statesMap);
+	    symbolsMap.forEach((symbol, symbolSet) -> {
+		    for (String q : symbolSet) {
+			ArrayList<String> qSet = statesMap.getOrDefault(q, new ArrayList<>());
+			if (qSet.isEmpty()) statesMap.put(q, qSet);
+			qSet.add(symbol);
+		    }
+	    });
+	    if (this.acceptStates.contains(state)) {
+		statesMap.put(gAcceptState, new ArrayList<>(List.of("")));
+	    }
+	});
+	function.put(gStartState, new HashMap<>());
+	function.get(gStartState).put(this.startState,
+            new ArrayList<>(List.of("")));
+	ArrayList<String> states = new ArrayList<>(this.states);
+
+	for (String leaving : removalSequence) {
+	    states.remove(leaving);
+
+	    HashMap<String, ArrayList<String>> leavingMap = function.getOrDefault(leaving, new HashMap<>());
+	    ArrayList<String> leavingSelfTransitions = leavingMap.get(leaving);
+	    String loopExpr = starRegex(unionRegexes(leavingSelfTransitions));
+
+	    ArrayList<String> senders = new ArrayList<>(states);
+	    senders.add(gStartState);
+	    for (String sender : senders) {
+		HashMap<String, ArrayList<String>> senderMap = function.getOrDefault(sender, new HashMap<>());
+		ArrayList<String> senderToLeavingTransitions = senderMap.get(leaving);
+		String senderToLeavingExpr =
+		    unionRegexes(senderToLeavingTransitions);
+		if (senderToLeavingExpr == null) continue;
+
+		ArrayList<String> receivers = new ArrayList<>(states);
+		receivers.add(gAcceptState);
+		for (String receiver : receivers) {
+		    ArrayList<String> leavingToReceiverTransitions = leavingMap.get(receiver);
+		    String leavingToReceiverExpr =
+			unionRegexes(leavingToReceiverTransitions);
+		    if (leavingToReceiverExpr == null) continue;
+
+		    ArrayList<String> units = new ArrayList<>();
+		    units.add(senderToLeavingExpr);
+		    units.add(loopExpr);
+		    units.add(leavingToReceiverExpr);
+		    String throughLeaving = concatRegexes(units);
+
+		    ArrayList<String> senderToReceiverTransitions = senderMap.get(receiver);
+		    String direct =
+			unionRegexes(senderToReceiverTransitions);
+		    units.clear();
+		    units.add(throughLeaving);
+		    units.add(direct);
+		    String newRegex = unionRegexes(units);
+		    senderMap.remove(receiver);
+		    senderToReceiverTransitions = new ArrayList<>();
+		    senderMap.put(receiver, senderToReceiverTransitions);
+		    senderToReceiverTransitions.add(newRegex);
+		}
+	    }
+
+	    function.remove(leaving);
+	    for (Map.Entry<String, HashMap<String, ArrayList<String>>> stateMapPair :
+		     new ArrayList<>(function.entrySet())) {
+		String state = stateMapPair.getKey();
+		HashMap<String, ArrayList<String>> stateMap = stateMapPair.getValue();
+		stateMap.remove(leaving);
+		if (stateMap.isEmpty()) function.remove(state);
+	    }
+	}
+	return function.get(gStartState).get(gAcceptState).toArray(new String[]{})[0];
     }
 
     public static NFA union(NFA first, NFA second, String newStartState, String suffix) {
