@@ -68,6 +68,7 @@ public class NFA {
 	Collection<String> acceptStates,
 	boolean isDeterministic // manually set determinism, you human know
     ) {
+	this.isDeterministic = isDeterministic;
 	this.states = new HashSet<>(states);
 
 	StringBuilder error = new StringBuilder();
