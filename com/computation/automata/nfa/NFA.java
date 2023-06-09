@@ -239,7 +239,7 @@ public class NFA {
 	    if (logging) {
 		System.err.println("=> " + automatonStates + "\n");
 	    }
-	    if (automatonStates.isEmpty()) {
+	    if (logging && automatonStates.isEmpty()) {
 		// No new states will be reached
 		// if there are no states at all
 		// So if we get an empty set during computation
@@ -606,30 +606,31 @@ public class NFA {
 	return function.get(gStartState).get(gAcceptState).toArray(new String[]{})[0];
     }
 
-    public static NFA union(NFA first, NFA second, String newStartState, String suffix) {
+    // Compute the union automaton of a list of NFAs
+    public static NFA union(List<NFA> automataList, String newStartState, List<String> suffixes) {
+	// Given a list of automata and naming suffixes in case of state naming conflicts
+	if (automataList.size() <= 1) {
+	    System.err.println("You can not invoke NFA.union with less two automata");
+	    System.exit(1);
+	}
+	if (automataList.size() != suffixes.size()) {
+	    System.err.println("Automata to be unioned are not then same size as naming suffixes.");
+	    System.exit(1);
+	}
 	StringBuilder error = new StringBuilder();
-	if (suffix.isEmpty()) {
-	    error.append("Naming suffix must be non-empty string.\n");
+	// Detect if a naming suffix is an empty string.
+	for (int i = 0;i < suffixes.size();i++) {
+	    if (suffixes.get(i).isEmpty()) {
+		error.append("Naming suffix no."+i+" must be non-empty string.\n");
+	    }
 	}
-	if (first.states.contains(newStartState)) {
-	    error.append("New start state is already in first automaton.\n");
+	// Detect if the start state already in some automaton
+	for (int i = 0;i < automataList.size();i++) {
+	    if (automataList.get(i).states.contains(newStartState)) {
+		error.append("Automaton no."+i+" already contains new start state '"+newStartState+"'\n");
+	    }
 	}
-	if (second.states.contains(newStartState)) {
-	    error.append("New start state is already in second automaton.\n");
-	}
-	if (first.states.contains(newStartState)) {
-	    error.append(
-                "First automaton already has state '" +
-		newStartState + "'\n");
-	}
-	if (second.states.contains(newStartState)) {
-	    error.append(
-                "Second automaton already has state '" +
-		newStartState + "'\n");
-	}
-	if (suffix.isEmpty()) {
-	    error.append("Provided suffix must be non-empty string.\n");
-	}
+	
 	if (!error.isEmpty()) {
 	    System.err.println(error);
 	    System.exit(1);
@@ -643,163 +644,210 @@ public class NFA {
 	union.startState = newStartState; // Set start state for the union automaton.
 
 	// ----- ALPHABET -----
-	union.alphabet.addAll(first.alphabet);
-	union.alphabet.addAll(second.alphabet);
+	// Add all alphabets of all automata
+	for (NFA automaton : automataList) {
+	    union.alphabet.addAll(automaton.alphabet);
+	}
 	// Manually add the empty string to the alphabet
-	// just in case both (first) and (second) are deterministic.
+	// just in case both all automata are deterministic
 	union.alphabet.add("");
 
 	// ----- STATES -----
-	union.states.add(newStartState);
-	HashSet<String> duplicateStates = new HashSet<>(); // Store states in (second) also in (first).
-	union.states.addAll(first.states);
-	for (String state : second.states) {
-	    // If this state, which is from (second),
-	    // is already in (union.states), append string in (suffix)
-	    // so that names don't clash and the two automata
-	    // operate separately when running (union).
-	    if (union.states.contains(state)) {
-		duplicateStates.add(state);
-		state += suffix;
+	union.states.add(newStartState); // add the start state of the union automaton
+	union.states.addAll(automataList.get(0).states); // states of first automaton
+	// lambdas don't allow capture of something non-final.
+	final HashSet<String> duplicates = new HashSet<>();
+	for (int i = 1;i < automataList.size();i++) {
+	    // add states for other automata with naming suffix, if necessary.
+	    for (String state : automataList.get(i).states) {
+		String s = "";
+		if (union.states.contains(state)) {
+		    // If it exists in first automaton, suffix it with the i-th suffix.
+		    duplicates.add(state);
+		    s = suffixes.get(i);
+		}
+		union.states.add(state + s);
 	    }
-	    union.states.add(state);
 	}
 
 	// ----- ACCEPT STATES ----
-	union.acceptStates.addAll(first.acceptStates);
-	for (String state : second.acceptStates) {
-	    // Do the same as above when adding states to (union)
-	    // accept states must also be handled similary
-	    // to avoid name clashes.
-	    if (duplicateStates.contains(state)) {
-		state += suffix;
+	union.acceptStates.addAll(automataList.get(0).acceptStates);
+	// Process accept states in the same manner.
+	for (int i = 1;i < automataList.size();i++) {
+	    for (String state : automataList.get(i).acceptStates) {
+		String s = "";
+		if (duplicates.contains(state)) {
+		    s = suffixes.get(i);
+		}
+		union.acceptStates.add(state + s);
 	    }
-	    union.acceptStates.add(state);
 	}
 
 	// ----- TRANSITION FUNCTION -----
 	// First, put all transitions in the first automaton.
-	union.transitionFunction.putAll(first.transitionFunction);
-	// Second, handle transitions in the second automaton.
-	second.transitionFunction.forEach((state, stateSymbolsMap) -> {
-		HashMap<String, HashSet<String>> stateCorrectedSymbolsMap = new HashMap<>();
-		stateSymbolsMap.forEach((symbol, symbolOutputSet) -> {
-			HashSet<String> symbolCorrectedOutputSet = new HashSet<>();
-			for (String x : symbolOutputSet) {
-			    // If (x) is a duplicate state, suffix it with value of (suffix)
-			    // so it refers to (x) in (second) not in (first).
-			    // This is because we're handling transitions in (second)
-			    // so if state (q) is in both (first) and (second)
-			    // we interpreter it as belonging to (second).
-			    String s = (duplicateStates.contains(x) ? suffix : "");
-			    symbolCorrectedOutputSet.add(x + s);
-			}
-			stateCorrectedSymbolsMap.put(symbol, symbolCorrectedOutputSet);
-		    });
-		String s = (duplicateStates.contains(state) ? suffix : "");
-		union.transitionFunction.put(state + s, stateCorrectedSymbolsMap);
-	    });
+	union.transitionFunction.putAll(automataList.get(0).transitionFunction);
+	for (int i = 1;i < automataList.size();i++) {
+	    final int j = i; // lambdas don't allow capture of something non-final.
+	    automataList.get(j).transitionFunction.forEach((state, stateSymbolsMap) -> {
+		    HashMap<String, HashSet<String>> stateCorrectedSymbolsMap = new HashMap<>();
+		    stateSymbolsMap.forEach((symbol, symbolOutputSet) -> {
+			    HashSet<String> symbolCorrectedOutputSet = new HashSet<>();
+			    for (String x : symbolOutputSet) {
+				String s = "";
+				if (duplicates.contains(x)) {
+				    s = suffixes.get(j);
+				}
+				symbolCorrectedOutputSet.add(x + s);
+			    }
+			    stateCorrectedSymbolsMap.put(symbol, symbolCorrectedOutputSet);
+			});
+		    String s = "";
+		    if (duplicates.contains(state)) {
+			s = suffixes.get(j);
+		    }
+		    union.transitionFunction.put(state + s, stateCorrectedSymbolsMap);
+		});
+	}
 
 	// ADD TRANSITIONS OF THE NEW START STATE.
-	// It has only two transitions, both of which are empty string transitions
-	// one leading to start state of (first)
-	// another leading to start state of (second).
-	union.putTransition(union.startState, "",
-            List.of(
-                first.startState,
-                // Append (suffix) to name of the start state in (second)
-                // if it already exist in (first).
-                second.startState +
-                (duplicateStates.contains(second.startState) ? suffix : "")
-            )
-        );
+	// For each automaton (N), add an empty string transition
+	// leading from the union automaton start state to
+	// start state of (N).
+	ArrayList<String> startStatesList = new ArrayList<>();
+	startStatesList.add(automataList.get(0).startState);
+	for (int i = 1;i < automataList.size();i++) {
+	    String s = "";
+	    if (duplicates.contains(automataList.get(i).startState)) {
+		s = suffixes.get(i);
+	    }
+	    startStatesList.add(automataList.get(i).startState + s);
+	}
+	union.putTransition(union.startState, "", startStatesList);
 
 	return union;
     }
 
-    public static NFA concatenate(NFA first, NFA second, String suffix) {
-	if (suffix.isEmpty()) {
-	    System.err.println("Naming suffix must be non-empty string.");
+    public static NFA concatenate(List<NFA> automataList, List<String> suffixes) {
+	// Given a list of automata and naming suffixes in case of state naming conflicts
+	if (automataList.size() <= 1) {
+	    System.err.println("You can not invoke NFA.concatenate with less two automata");
 	    System.exit(1);
 	}
+	if (automataList.size() != suffixes.size()) {
+	    System.err.println("Automata to be concatenateed are not then same size as naming suffixes.");
+	    System.exit(1);
+	}
+	StringBuilder error = new StringBuilder();
+	// Detect if a naming suffix is an empty string.
+	for (int i = 0;i < suffixes.size();i++) {
+	    if (suffixes.get(i).isEmpty()) {
+		error.append("Naming suffix no."+i+" must be non-empty string.\n");
+	    }
+	}
+	
+	if (!error.isEmpty()) {
+	    System.err.println(error);
+	    System.exit(1);
+	}
+	
 	NFA result = new NFA();
 	// ----- DETERMINISM -----
 	result.isDeterministic = false;
 
 	// ----- START STATE -----
-	// Set start state, which is the start state in (first)
-	result.startState = first.startState;
+	// Set start state, which is the start state in first automaton
+	result.startState = automataList.get(0).startState;
 
 	// ----- ALPHABET -----
-	result.alphabet.addAll(first.alphabet);
-	result.alphabet.addAll(second.alphabet);
+	for (NFA automata : automataList) {
+	    result.alphabet.addAll(automata.alphabet);
+	}
 	// Manually add the empty string to the alphabet
-	// just in case both (first) and (second) are deterministic.
+	// just in case all automata are deterministic.
 	result.alphabet.add("");
 
 	// ----- STATES -----
-	// Add all states in first automaton
-	result.states.addAll(first.states);
-	HashSet<String> duplicateStates = new HashSet<>();
-	// Add all states in second automaton, but
-	// a state (q) is in both (first) and (second)
-	// suffix its name with string (suffix).
-	for (String state : second.states) {
-	    if (result.states.contains(state)) {
-		duplicateStates.add(state);
-		state += suffix;
+	// lambdas don't allow capture of something non-final.
+	result.states.addAll(automataList.get(0).states); // states of first automaton
+	final HashSet<String> duplicates = new HashSet<>();
+	for (int i = 1;i < automataList.size();i++) {
+	    for (String state : automataList.get(i).states) {
+		String s = "";
+		if (result.states.contains(state)) {
+		    duplicates.add(state);
+		    s = suffixes.get(i);
+		}
+		result.states.add(state + s);
 	    }
-	    result.states.add(state);
 	}
 
-	// ----- ACCEPT STATES -----
-	// Set the accept states
-	// Which are the accept states in (second)
-	// with (suffix) appended when accept state (q) in (second)
-	// is a state in (first).
-	for (String state : second.acceptStates) {
-	    if (duplicateStates.contains(state)) {
-		state += suffix;
+	// ----- ACCEPT STATES ----
+	// The accept states are those of the last automaton
+	for (String state : automataList.get(automataList.size()-1).acceptStates) {
+	    String s = "";
+	    if (duplicates.contains(state)) {
+		s = suffixes.get(automataList.size()-1);
 	    }
-	    result.acceptStates.add(state);
+	    result.acceptStates.add(state + s);
 	}
 
 	// ----- TRANSITION FUNCTION -----
-	// Add all transitions in first automaton
-	result.transitionFunction.putAll(first.transitionFunction);
-	// Add all transitions in second automaton
-	// but when state (q) in (second) appears either as
-	// a key in the transitions map or in the outputs set in
-	// some map in the transitions map, suffix that state (q).
-	second.transitionFunction.forEach((state, stateSymbolsMap) -> {
-		HashMap<String, HashSet<String>> stateCorrectedSymbolsMap = new HashMap<>();
-		stateSymbolsMap.forEach((symbol, symbolOutputSet) -> {
-			HashSet<String> symbolCorrectedOutputSet = new HashSet<>();
-			for (String x : symbolOutputSet) {
-			    // If (x) is a duplicate state, suffix it with value of (suffix)
-			    // so it refers to (x) in (second) not in (first).
-			    // This is because we're handling transitions in (second)
-			    // so if state (q) is in both (first) and (second)
-			    // we interpreter it as belonging to (second).
-			    String s = (duplicateStates.contains(x) ? suffix : "");
-			    symbolCorrectedOutputSet.add(x + s);
-			}
-			stateCorrectedSymbolsMap.put(symbol, symbolCorrectedOutputSet);
-		    });
-		String s = (duplicateStates.contains(state) ? suffix : "");
-		result.transitionFunction.put(state + s, stateCorrectedSymbolsMap);
-	    });
+	// First, put all transitions in the first automaton.
+	result.transitionFunction.putAll(automataList.get(0).transitionFunction);
+	for (int i = 1;i < automataList.size();i++) {
+	    final int j = i; // lambdas don't allow capture of something non-final.
+	    automataList.get(j).transitionFunction.forEach((state, stateSymbolsMap) -> {
+		    HashMap<String, HashSet<String>> stateCorrectedSymbolsMap = new HashMap<>();
+		    stateSymbolsMap.forEach((symbol, symbolOutputSet) -> {
+			    HashSet<String> symbolCorrectedOutputSet = new HashSet<>();
+			    for (String x : symbolOutputSet) {
+				String s = "";
+				if (duplicates.contains(x)) {
+				    s = suffixes.get(j);
+				}
+				symbolCorrectedOutputSet.add(x + s);
+			    }
+			    stateCorrectedSymbolsMap.put(symbol, symbolCorrectedOutputSet);
+			});
+		    String s = "";
+		    if (duplicates.contains(state)) {
+			s = suffixes.get(j);
+		    }
+		    result.transitionFunction.put(state + s, stateCorrectedSymbolsMap);
+		});
+	}
 
-	// For each accept state in (first)
-	// add an empty string transition leading to
-	// the start state in (second)
-	String s = second.startState;
-	if (duplicateStates.contains(second.startState)) {
-	    s += suffix;
+	// For each automaton in index (i),
+	// add an empty string transition leading from the accept states
+	// of automaton (i) to the start state of automaton (i+1).
+	// Of course, the last is excepted.
+	{
+	    // Add empty string transitions for
+	    // the accept states of first automaton
+	    String s = "";
+	    if (duplicates.contains(automataList.get(1).startState)) {
+		s = suffixes.get(1);
+	    }
+	    for (String state : automataList.get(0).acceptStates) {
+		result.putTransition(state, "", List.of(automataList.get(1).startState + s));
+	    }
 	}
-	for (String state : first.acceptStates) {
-	    result.putTransition(state, "", List.of(s));
+	for (int i = 1;i < automataList.size()-1;i++) {
+	    NFA current = automataList.get(i);
+	    NFA next = automataList.get(i+1);
+	    String s1 = "";
+	    if (duplicates.contains(next.startState)) {
+		s1 = suffixes.get(i+1);
+	    }
+	    for (String state : current.acceptStates) {
+		String s2 = "";
+		if (duplicates.contains(state)) {
+		    s2 = suffixes.get(i);
+		}
+		result.putTransition(state + s2, "", List.of(next.startState + s1));
+	    }
 	}
+
 	return result;
     }
 
@@ -826,8 +874,8 @@ public class NFA {
 	result.states.addAll(automaton.states);
 
 	// ----- ACCEPT STATES -----
-	result.acceptStates.addAll(automaton.acceptStates);
 	result.acceptStates.add(newStartState);
+	result.acceptStates.addAll(automaton.acceptStates);
 
 	// ----- TRANSITION FUNCTION -----
 	result.transitionFunction.putAll(automaton.transitionFunction);
