@@ -1,4 +1,4 @@
-package com.computation.automata;
+package com.computation.automata.nfa;
 
 import java.util.function.Function;
 import java.util.Collection;
