@@ -1,3 +1,7 @@
 com/computation/automata/nfa/*.class
 com/computation/automata/nfa/*~
 com/computation/automata/nfa/Main.java
+com/computation/generators/regexp/*.class
+com/computation/generators/regexp/*~
+com/computation/generators/regexp/Main.java
+
