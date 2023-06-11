@@ -268,7 +268,7 @@ public class NFA {
 	return compute(input, true);
     }
 
-    public NFA toDFA(String failState) {
+    public NFA toDFA(String sinkState) {
 	if (isDeterministic) return this;
 	if (thisDFACache != null) return thisDFACache; // no need to redo the computation
 
@@ -287,95 +287,58 @@ public class NFA {
 	    return s.toString();
 	};
 
-	thisDFACache.startState = nameStyle.apply(expand(List.of(this.startState)));
+	HashSet<String> startingSet = expand(List.of(this.startState));
+	thisDFACache.startState = nameStyle.apply(expand(startingSet));
 
-	ArrayList<HashSet<String>> powerSet = new ArrayList<>();
-	powerSet.add(new HashSet<String>()); // the empty set
-
-	// At first, mark all states as "unreachable"
-	HashSet<String> notReachableStates = new HashSet<>();
-	final String failStateName = "<" + failState + ">";
-	for (int size = 1; size <= this.states.size(); size++) {
-	    int current = powerSet.size();
-	    for (int i = 0; i < current; i++) {
-		HashSet<String> subset = powerSet.get(i);
-		for (String state : this.states) {
-		    HashSet<String> newSubset = new HashSet<>(subset);
-		    newSubset.add(state);
-
-		    // make sure this (newSubset) is actually "new"
-		    // search through all (powerSet),
-		    // if this (newSubset) matches something there
-		    // we will not add it to (powerSet)
-		    // otherwise we will add it to (powerSet)
-		    boolean addNewSubset = true; // assume it's new
-		    for (int j = 0; j < powerSet.size(); j++) {
-			if (newSubset.containsAll(powerSet.get(j)) && powerSet.get(j).containsAll(newSubset)) {
-			    // it's a subset of powerSet.get(j) and powerSet.get(j) is a subset of it
-			    // thus newSubset is just powerSet.get(j)
-			    // it's already there, do not allow it
-			    addNewSubset = false;
+	ArrayList<HashSet<String>> sets = new ArrayList<>();
+	sets.add(startingSet);
+	int begin = 0;
+	while (true) {
+	    int before = sets.size();
+	    int preIterationSize = sets.size();
+	    for (int i = begin;i < preIterationSize;i++) {
+		HashSet<String> currentSet = new HashSet<>();
+		currentSet.addAll(sets.get(i));
+		String currentSetName = (currentSet.isEmpty() ? sinkState : nameStyle.apply(currentSet));
+		thisDFACache.states.add(currentSetName);
+		for (String q : currentSet) {
+		    if (this.acceptStates.contains(q)) {
+			thisDFACache.acceptStates.add(currentSetName);
+			break;
+		    }
+		}
+		for (String symbol : thisDFACache.alphabet) {
+		    HashSet<String> y = move(currentSet, symbol);
+		    boolean addSet = true;
+		    for (HashSet<String> s : sets) {
+			if (y.containsAll(s) && s.containsAll(y)) {
+			    addSet = false;
 			    break;
 			}
 		    }
-
-		    if (addNewSubset) {
-			powerSet.add(newSubset); // so that we continue this iteration
-			notReachableStates.add(nameStyle.apply(newSubset));
-
-			final String newSubsetName = nameStyle.apply(newSubset);
-			thisDFACache.states.add(newSubsetName);
-
-			// check to see if it contains an accept state
-			// because if then it's an accept state of the deterministic
-			// counterpart of this nondeterministic automaton object
-			for (String acceptState : this.acceptStates) {
-			    if (newSubset.contains(acceptState)) {
-				thisDFACache.acceptStates.add(newSubsetName);
+		    if (addSet) sets.add(y);
+		    if (y.isEmpty()) {
+			thisDFACache.putTransition(currentSetName, symbol, List.of(sinkState));
+			thisDFACache.putTransition(sinkState, symbol, List.of(sinkState));
+		    } else {
+			thisDFACache.states.add(nameStyle.apply(y));
+			for (String q : y) {
+			    if (this.acceptStates.contains(q)) {
+				thisDFACache.acceptStates.add(nameStyle.apply(y));
 				break;
 			    }
 			}
-
-			// add all of its transitions
-			HashMap<String, HashSet<String>> newSubsetMap = new HashMap<>();
-			for (String symbol : thisDFACache.alphabet) {
-			    HashSet<String> symbolOutputs = new HashSet<>();
-			    HashSet<String> x = move(newSubset, symbol);
-			    if (x.isEmpty()) {
-				// all states in (newSubset) do not move further
-				// when given input (symbol), thus the expression
-				// move(newSubset, symbol) yields the empty set
-				// which we represent as fail state
-				symbolOutputs.add(failStateName);
-			    } else {
-				symbolOutputs.add(nameStyle.apply(x));
-				// But when some state appears in the output set
-				// of some transition, remove it from the "unreachable" list
-				notReachableStates.remove(nameStyle.apply(x));
-			    }
-			    newSubsetMap.put(symbol, symbolOutputs);
-			}
-			thisDFACache.transitionFunction.put(newSubsetName, newSubsetMap);
+			thisDFACache.putTransition(currentSetName, symbol, List.of(nameStyle.apply(y)));
 		    }
+
 		}
 	    }
+	    if (before != sets.size()) {
+		begin = before;
+	    } else {
+		break;
+	    }
 	}
-	// DONT FORGET TO REMOVE THE START STATE FROM "unreachable" LIST
-	notReachableStates.remove(thisDFACache.startState);
-	for (String s : notReachableStates) {
-	    thisDFACache.transitionFunction.remove(s);
-	}
-
-	// Add fail state and its transitions
-	thisDFACache.states.add(failStateName);
-	final HashMap<String, HashSet<String>> failStateTransitions = new HashMap<>();
-	for (String symbol : thisDFACache.alphabet) {
-	    // for each symbol fail state receives,
-	    // it just goes back to itself.
-	    // each of its transitions are {failStatename, symbol, {failStateName}}
-	    failStateTransitions.put(symbol, new HashSet<>(List.of(failStateName)));
-	}
-	thisDFACache.transitionFunction.put(failStateName, failStateTransitions);
 
 	return thisDFACache;
     }
