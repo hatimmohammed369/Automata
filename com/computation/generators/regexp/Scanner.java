@@ -17,7 +17,7 @@ public class Scanner {
     }
 
     List<Token> generateTokens() {
-	while (!isAtEnd()) {
+	while (true) {
 	    char prev = previous();
 	    char cur = peek();
 	    if (
@@ -32,7 +32,8 @@ public class Scanner {
 		tokens.add(new Token(TokenType.EMPTY_STRING, "", current));
 		alphabet.add("");
 	    }
-	    tokens.add(generateNextToken());
+	    if (!isAtEnd()) tokens.add(generateNextToken());
+	    else break;
 	}
 	tokens.add(new Token(TokenType.END, "", current));
 	return tokens;
@@ -61,7 +62,8 @@ public class Scanner {
     }
 
     char peek() {
-	return source.charAt(current);
+	if (!isAtEnd()) source.charAt(current);
+	return '\0';
     }
 
     char previous() {
