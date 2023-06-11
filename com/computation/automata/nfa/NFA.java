@@ -12,14 +12,14 @@ import java.util.HashMap;
 
 // Nondeterministic Finite Automata
 public class NFA {
-    HashSet<String> states;
-    HashSet<String> alphabet;
+    public HashSet<String> states;
+    public HashSet<String> alphabet;
     // in (transitionFunction) keys are states
     // keys in (HashMap<String, HashSet<String>>) are alphabet symbols (regular expressions in GNFAs)
-    HashMap<String, HashMap<String, HashSet<String>>> transitionFunction;
-    String startState;
-    HashSet<String> acceptStates;
-    boolean isDeterministic;
+    public HashMap<String, HashMap<String, HashSet<String>>> transitionFunction;
+    public String startState;
+    public HashSet<String> acceptStates;
+    public boolean isDeterministic;
     // this field stays null for deterministic automata
     // since calling toDFA just returns this object
     // which is already deterministic
