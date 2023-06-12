@@ -62,7 +62,7 @@ public class Scanner {
     }
 
     char peek() {
-	if (!isAtEnd()) source.charAt(current);
+	if (!isAtEnd()) return source.charAt(current);
 	return '\0';
     }
 

@@ -23,7 +23,7 @@ public class NFA {
     // this field stays null for deterministic automata
     // since calling toDFA just returns this object
     // which is already deterministic
-    NFA thisDFACache = null;
+    NFA dfa = null;
 
     private HashMap<String, HashSet<String>> symbolsMapOf(String state) {
 	return transitionFunction.getOrDefault(
@@ -270,15 +270,15 @@ public class NFA {
 
     public NFA toDFA(String sinkState) {
 	if (isDeterministic) return this;
-	if (thisDFACache != null) return thisDFACache; // no need to redo the computation
+	if (dfa != null) return dfa; // no need to redo the computation
 
 	// constructor NFA() initializes all fileds
-	thisDFACache = new NFA();
+	dfa = new NFA();
 
-	thisDFACache.isDeterministic = true; // by definition
+	dfa.isDeterministic = true; // by definition
 
-	thisDFACache.alphabet.addAll(this.alphabet);
-	thisDFACache.alphabet.remove(""); // remove the empty string if present
+	dfa.alphabet.addAll(this.alphabet);
+	dfa.alphabet.remove(""); // remove the empty string if present
 
 	final Function<Object, String> nameStyle = (x) -> {
 	    StringBuilder s = new StringBuilder(x.toString());
@@ -288,7 +288,7 @@ public class NFA {
 	};
 
 	HashSet<String> startingSet = expand(List.of(this.startState));
-	thisDFACache.startState = nameStyle.apply(expand(startingSet));
+	dfa.startState = nameStyle.apply(expand(startingSet));
 
 	ArrayList<HashSet<String>> sets = new ArrayList<>();
 	sets.add(startingSet);
@@ -300,14 +300,14 @@ public class NFA {
 		HashSet<String> currentSet = new HashSet<>();
 		currentSet.addAll(sets.get(i));
 		String currentSetName = (currentSet.isEmpty() ? sinkState : nameStyle.apply(currentSet));
-		thisDFACache.states.add(currentSetName);
+		dfa.states.add(currentSetName);
 		for (String q : currentSet) {
 		    if (this.acceptStates.contains(q)) {
-			thisDFACache.acceptStates.add(currentSetName);
+			dfa.acceptStates.add(currentSetName);
 			break;
 		    }
 		}
-		for (String symbol : thisDFACache.alphabet) {
+		for (String symbol : dfa.alphabet) {
 		    HashSet<String> y = move(currentSet, symbol);
 		    boolean addSet = true;
 		    for (HashSet<String> s : sets) {
@@ -318,17 +318,17 @@ public class NFA {
 		    }
 		    if (addSet) sets.add(y);
 		    if (y.isEmpty()) {
-			thisDFACache.putTransition(currentSetName, symbol, List.of(sinkState));
-			thisDFACache.putTransition(sinkState, symbol, List.of(sinkState));
+			dfa.putTransition(currentSetName, symbol, List.of(sinkState));
+			dfa.putTransition(sinkState, symbol, List.of(sinkState));
 		    } else {
-			thisDFACache.states.add(nameStyle.apply(y));
+			dfa.states.add(nameStyle.apply(y));
 			for (String q : y) {
 			    if (this.acceptStates.contains(q)) {
-				thisDFACache.acceptStates.add(nameStyle.apply(y));
+				dfa.acceptStates.add(nameStyle.apply(y));
 				break;
 			    }
 			}
-			thisDFACache.putTransition(currentSetName, symbol, List.of(nameStyle.apply(y)));
+			dfa.putTransition(currentSetName, symbol, List.of(nameStyle.apply(y)));
 		    }
 
 		}
@@ -340,7 +340,7 @@ public class NFA {
 	    }
 	}
 
-	return thisDFACache;
+	return dfa;
     }
 
     // IF EXPRESSION IS NOT THE EMPTY STRING,
