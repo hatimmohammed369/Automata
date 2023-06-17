@@ -45,12 +45,15 @@ public class RegularExpression implements Expression.Visitor {
 	List<Token> tokens = scanner.generateTokens();
 	Set<String> alphabet = scanner.alphabet;
 	Parser parser = new Parser(scanner.tokens, scanner.alphabet, expression);
-	Expression parseTree = parser.parse();
-	if (hadError) System.exit(1);
 	RegularExpression r = new RegularExpression();
-	r.alphabet = alphabet;
-	r.computeEquivalentNFA(parseTree);
-	Expression.counter = 0;
+	try {
+	    Expression parseTree = parser.parse();
+	    r.alphabet = alphabet;
+	    r.computeEquivalentNFA(parseTree);
+	    Expression.counter = 0;
+	} catch (Parser.ParserError e) {
+	    System.exit(1);
+	}
 	return r;
     }
 

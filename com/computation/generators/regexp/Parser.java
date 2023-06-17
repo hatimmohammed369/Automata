@@ -21,12 +21,16 @@ public class Parser {
 
     // R => expression
     // expression => union
-    // union => concat ( '|' concat )? ( '|' concat ) \*
+    // union => concat ( '|' concat )? ( '|' concat )*
     // concat => star star*
-    // star => primary ( '*'  )?
+    // star => primary ( '*' )?
     // primary => SYMBOL | '(' expression ')'
     Expression parse() {
-	return expression();
+	Expression expr = expression();
+	if (peek().lexeme == ")") {
+	    throw error(peek(), "Un-matched ')'");
+	}
+	return expr;
     }
 
     // expression => union
